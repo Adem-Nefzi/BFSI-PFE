@@ -407,21 +407,96 @@ export function Features() {
           </p>
         </div>
 
-        {/* Bento Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {features.map((feature, index) => (
+        {/* Bento Grid - Professional Layout */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-6 auto-rows-auto">
+          {/* AI Assistant Card - Large (2x2) */}
+          <div className="sm:col-span-2 lg:col-span-2 lg:row-span-2">
             <FeatureCard
-              key={feature.title}
-              title={feature.title}
-              description={feature.description}
-              icon={feature.icon}
-              gradient={feature.gradient}
-              size={feature.size}
-              delay={index * 0.1}
+              key={features[0].title}
+              title={features[0].title}
+              description={features[0].description}
+              icon={features[0].icon}
+              gradient={features[0].gradient}
+              size="large"
+              delay={0}
             >
-              {feature.content}
+              {features[0].content}
             </FeatureCard>
-          ))}
+          </div>
+
+          {/* Column 2 - Stack of small cards */}
+          <div className="sm:col-span-1 lg:col-span-1">
+            <FeatureCard
+              key={features[1].title}
+              title={features[1].title}
+              description={features[1].description}
+              icon={features[1].icon}
+              gradient={features[1].gradient}
+              size="normal"
+              delay={0.1}
+            >
+              {features[1].content}
+            </FeatureCard>
+          </div>
+
+          <div className="sm:col-span-1 lg:col-span-1">
+            <FeatureCard
+              key={features[2].title}
+              title={features[2].title}
+              description={features[2].description}
+              icon={features[2].icon}
+              gradient={features[2].gradient}
+              size="normal"
+              delay={0.2}
+            >
+              {features[2].content}
+            </FeatureCard>
+          </div>
+
+          {/* Full width Dashboard Card */}
+          <div className="sm:col-span-2 lg:col-span-2">
+            <FeatureCard
+              key={features[3].title}
+              title={features[3].title}
+              description={features[3].description}
+              icon={features[3].icon}
+              gradient={features[3].gradient}
+              size="wide"
+              delay={0.3}
+            >
+              {features[3].content}
+            </FeatureCard>
+          </div>
+
+          {/* Notification Card */}
+          <div className="sm:col-span-1 lg:col-span-1">
+            <FeatureCard
+              key={features[4].title}
+              title={features[4].title}
+              description={features[4].description}
+              icon={features[4].icon}
+              gradient={features[4].gradient}
+              size="normal"
+              delay={0.4}
+            >
+              {features[4].content}
+            </FeatureCard>
+          </div>
+
+          {/* Security Card */}
+          <div className="sm:col-span-1 lg:col-span-1">
+            <FeatureCard
+              key={features[5].title}
+              title={features[5].title}
+              description={features[5].description}
+              icon={features[5].icon}
+              gradient={features[5].gradient}
+              size="normal"
+              delay={0.5}
+            >
+              {features[5].content}
+            </FeatureCard>
+          </div>
         </div>
       </div>
     </section>

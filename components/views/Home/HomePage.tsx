@@ -6,6 +6,7 @@ import { Hero } from "@/components/views/Home/Hero";
 import { Features } from "@/components/views/Home/Features";
 import { HowItWorks } from "@/components/views/Home/HowItWorks";
 import { Stats } from "@/components/views/Home/Stats";
+import { CTA } from "@/components/views/Home/CTA";
 import { Footer } from "@/components/views/Home/Footer";
 import { Sparkles } from "lucide-react";
 
@@ -146,6 +147,7 @@ export function HomePage() {
         <Features />
         <HowItWorks />
         <Stats />
+        <CTA />
         <Footer />
       </main>
 

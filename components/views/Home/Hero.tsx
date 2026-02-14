@@ -15,6 +15,7 @@ import {
   TrendingUp,
   Bell,
 } from "lucide-react";
+import { Spotlight } from "@/components/aceternity/Spotlight";
 
 // Floating Orb Component
 function FloatingOrb({
@@ -271,6 +272,9 @@ export function Hero() {
           background: `radial-gradient(600px circle at ${50 + mousePosition.x}% ${50 + mousePosition.y}%, rgba(59, 130, 246, 0.15), transparent 40%)`,
         }}
       />
+
+      {/* Background Layer 5 - Aceternity Spotlight */}
+      <Spotlight className="opacity-50 dark:opacity-30 pointer-events-none" fill="rgba(59, 130, 246, 0.3)" />
 
       {/* Particles */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
