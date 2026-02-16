@@ -1,10 +1,10 @@
 "use client";
 
 import { useEffect, useState, useRef, useMemo } from "react";
+import { Button } from "@/components/ui/button";
 import {
   Sparkles,
   Rocket,
-  Play,
   Lock,
   Check,
   Zap,
@@ -15,6 +15,213 @@ import {
   TrendingUp,
   Bell,
 } from "lucide-react";
+
+// Ripple Effect Component
+function BackgroundRipple() {
+  return (
+    <div className="absolute inset-0 overflow-hidden pointer-events-none">
+      <svg
+        className="absolute inset-0 w-full h-full"
+        xmlns="http://www.w3.org/2000/svg"
+      >
+        <defs>
+          <linearGradient
+            id="ripple-gradient-1"
+            x1="0%"
+            y1="0%"
+            x2="100%"
+            y2="100%"
+          >
+            <stop offset="0%" stopColor="rgb(59, 130, 246)" stopOpacity="0.3" />
+            <stop
+              offset="50%"
+              stopColor="rgb(139, 92, 246)"
+              stopOpacity="0.2"
+            />
+            <stop
+              offset="100%"
+              stopColor="rgb(20, 184, 166)"
+              stopOpacity="0.1"
+            />
+          </linearGradient>
+          <linearGradient
+            id="ripple-gradient-2"
+            x1="100%"
+            y1="0%"
+            x2="0%"
+            y2="100%"
+          >
+            <stop offset="0%" stopColor="rgb(139, 92, 246)" stopOpacity="0.3" />
+            <stop
+              offset="50%"
+              stopColor="rgb(59, 130, 246)"
+              stopOpacity="0.2"
+            />
+            <stop
+              offset="100%"
+              stopColor="rgb(20, 184, 166)"
+              stopOpacity="0.1"
+            />
+          </linearGradient>
+        </defs>
+
+        {/* First set of ripples */}
+        <circle
+          cx="50%"
+          cy="50%"
+          r="0"
+          fill="none"
+          stroke="url(#ripple-gradient-1)"
+          strokeWidth="2"
+          opacity="0"
+        >
+          <animate
+            attributeName="r"
+            from="0"
+            to="800"
+            dur="8s"
+            repeatCount="indefinite"
+          />
+          <animate
+            attributeName="opacity"
+            values="0;0.5;0.3;0"
+            dur="8s"
+            repeatCount="indefinite"
+          />
+        </circle>
+
+        <circle
+          cx="50%"
+          cy="50%"
+          r="0"
+          fill="none"
+          stroke="url(#ripple-gradient-2)"
+          strokeWidth="2"
+          opacity="0"
+        >
+          <animate
+            attributeName="r"
+            from="0"
+            to="800"
+            dur="8s"
+            begin="2s"
+            repeatCount="indefinite"
+          />
+          <animate
+            attributeName="opacity"
+            values="0;0.4;0.2;0"
+            dur="8s"
+            begin="2s"
+            repeatCount="indefinite"
+          />
+        </circle>
+
+        <circle
+          cx="50%"
+          cy="50%"
+          r="0"
+          fill="none"
+          stroke="url(#ripple-gradient-1)"
+          strokeWidth="3"
+          opacity="0"
+        >
+          <animate
+            attributeName="r"
+            from="0"
+            to="800"
+            dur="8s"
+            begin="4s"
+            repeatCount="indefinite"
+          />
+          <animate
+            attributeName="opacity"
+            values="0;0.6;0.4;0"
+            dur="8s"
+            begin="4s"
+            repeatCount="indefinite"
+          />
+        </circle>
+
+        <circle
+          cx="50%"
+          cy="50%"
+          r="0"
+          fill="none"
+          stroke="url(#ripple-gradient-2)"
+          strokeWidth="2"
+          opacity="0"
+        >
+          <animate
+            attributeName="r"
+            from="0"
+            to="800"
+            dur="8s"
+            begin="6s"
+            repeatCount="indefinite"
+          />
+          <animate
+            attributeName="opacity"
+            values="0;0.5;0.3;0"
+            dur="8s"
+            begin="6s"
+            repeatCount="indefinite"
+          />
+        </circle>
+
+        {/* Additional slower ripples for depth */}
+        <circle
+          cx="50%"
+          cy="50%"
+          r="0"
+          fill="none"
+          stroke="url(#ripple-gradient-1)"
+          strokeWidth="4"
+          opacity="0"
+        >
+          <animate
+            attributeName="r"
+            from="0"
+            to="1000"
+            dur="12s"
+            repeatCount="indefinite"
+          />
+          <animate
+            attributeName="opacity"
+            values="0;0.3;0.15;0"
+            dur="12s"
+            repeatCount="indefinite"
+          />
+        </circle>
+
+        <circle
+          cx="50%"
+          cy="50%"
+          r="0"
+          fill="none"
+          stroke="url(#ripple-gradient-2)"
+          strokeWidth="3"
+          opacity="0"
+        >
+          <animate
+            attributeName="r"
+            from="0"
+            to="1000"
+            dur="12s"
+            begin="4s"
+            repeatCount="indefinite"
+          />
+          <animate
+            attributeName="opacity"
+            values="0;0.25;0.12;0"
+            dur="12s"
+            begin="4s"
+            repeatCount="indefinite"
+          />
+        </circle>
+      </svg>
+    </div>
+  );
+}
 
 // Floating Orb Component
 function FloatingOrb({
@@ -211,7 +418,10 @@ export function Hero() {
       {/* Background Layer 1 - Animated Gradient Mesh */}
       <div className="absolute inset-0 gradient-bg-mesh animate-gradient-shift" />
 
-      {/* Background Layer 2 - Grid Pattern */}
+      {/* Background Layer 2 - Ripple Effect */}
+      <BackgroundRipple />
+
+      {/* Background Layer 3 - Grid Pattern */}
       <div
         className="absolute inset-0 grid-pattern"
         style={{
@@ -222,7 +432,7 @@ export function Hero() {
         }}
       />
 
-      {/* Background Layer 3 - Floating Orbs */}
+      {/* Background Layer 4 - Floating Orbs */}
       <FloatingOrb
         size={200}
         color="rgba(59, 130, 246, 0.3)"
@@ -264,7 +474,7 @@ export function Hero() {
         top="80%"
       />
 
-      {/* Background Layer 4 - Spotlight Effect */}
+      {/* Background Layer 5 - Spotlight Effect */}
       <div
         className="absolute inset-0 pointer-events-none opacity-30 dark:opacity-20"
         style={{
@@ -289,13 +499,13 @@ export function Hero() {
       <div className="relative z-10 max-w-7xl mx-auto text-center">
         {/* Announcement Badge */}
         <div
-          className={`inline-flex items-center gap-2 px-4 py-2 rounded-full glass mb-8 transition-all duration-700 ${
+          className={`inline-flex items-center gap-2 px-4 py-2 mt-4 rounded-full glass mb-8 transition-all duration-700 ${
             isLoaded ? "opacity-100 translate-y-0" : "opacity-0 -translate-y-4"
           }`}
         >
           <Sparkles className="w-4 h-4 text-blue-600 dark:text-blue-400 animate-spin-slow" />
           <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
-            New: GPT-4 Turbo + Blockchain Integration
+            Powered by Ai + Blockchain Integration
           </span>
         </div>
 
@@ -322,6 +532,7 @@ export function Hero() {
           AI-Powered contract analysis meets blockchain verification. The only
           platform that truly understands your banking and insurance documents.
           <span className="text-blue-600 dark:text-blue-400 font-medium">
+            {" "}
             Secure, transparent, instant.
           </span>
         </p>
@@ -333,22 +544,60 @@ export function Hero() {
           }`}
         >
           {/* Primary CTA */}
-          <button className="group relative px-8 py-4 text-base md:text-lg font-bold text-white btn-gradient rounded-2xl overflow-hidden">
-            <span className="relative z-10 flex items-center gap-2">
-              Start Free Trial
-              <Rocket className="w-5 h-5 transition-transform duration-300 group-hover:translate-x-1" />
-            </span>
-            <div className="absolute inset-0 bg-gradient-to-r from-blue-500 via-violet-500 to-teal-500 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-            <div className="absolute inset-0 animate-shimmer opacity-30" />
-          </button>
+          <Button
+            className="
+  group relative px-12 py-5 
+  text-lg md:text-xl font-semibold 
+  text-white rounded-2xl
+  overflow-hidden
+  bg-gradient-to-r 
+  from-[hsl(var(--primary))] 
+  via-[hsl(var(--accent))] 
+  to-[hsl(var(--secondary))]
+  shadow-lg shadow-blue-500/20
+  transition-all duration-300 ease-out
+  hover:scale-[1.04]
+  hover:shadow-xl hover:shadow-blue-500/40
+  active:scale-[0.98]
+"
+          >
+            {/* Glow background layer */}
+            <div
+              className="
+    absolute inset-0 
+    opacity-0 group-hover:opacity-100
+    transition-opacity duration-500
+    bg-gradient-to-r 
+    from-blue-400/20 
+    via-purple-400/20 
+    to-teal-400/20
+    blur-xl
+  "
+            />
 
-          {/* Secondary CTA */}
-          <button className="group flex items-center gap-2 px-8 py-4 text-base md:text-lg font-semibold text-slate-900 dark:text-white bg-white/10 dark:bg-white/5 backdrop-blur-sm border border-white/20 rounded-2xl hover:bg-white/20 transition-all duration-300 hover:scale-105">
-            <div className="p-2 rounded-full bg-blue-500/10 dark:bg-blue-500/20 group-hover:bg-blue-500/20 transition-colors">
-              <Play className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-            </div>
-            Watch Demo
-          </button>
+            {/* Animated gradient shift layer */}
+            <div
+              className="
+    absolute inset-0 
+    bg-[length:200%_200%]
+    animate-gradient-shift
+    opacity-70
+    mix-blend-overlay
+  "
+            />
+
+            <span className="relative z-10 flex items-center gap-3">
+              Get Started
+              <Rocket
+                className="
+      w-6 h-6 
+      transition-transform duration-300 
+      group-hover:translate-x-1 
+      group-hover:-translate-y-1
+    "
+              />
+            </span>
+          </Button>
         </div>
 
         {/* Trust Indicators */}
@@ -468,10 +717,11 @@ export function Hero() {
                   </div>
                 </div>
 
-                {/* Right Column - Notifications */}
-                <div className="space-y-4">
+                {/* Right Column - Notifications & Chart (Equal Heights) */}
+                <div className="flex flex-col gap-6">
+                  {/* Notifications - 50% height */}
                   <div
-                    className="glass rounded-xl p-4"
+                    className="glass rounded-xl p-4 flex-1"
                     style={{
                       animation: `slide-up 0.6s ease-out forwards`,
                       animationDelay: `1s`,
@@ -520,9 +770,9 @@ export function Hero() {
                     </div>
                   </div>
 
-                  {/* Mini Chart */}
+                  {/* Mini Chart - 50% height */}
                   <div
-                    className="glass rounded-xl p-4"
+                    className="glass rounded-xl p-4 flex-1 flex flex-col"
                     style={{
                       animation: `slide-up 0.6s ease-out forwards`,
                       animationDelay: `1.2s`,
@@ -532,7 +782,7 @@ export function Hero() {
                     <span className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-3 block">
                       Processing Volume
                     </span>
-                    <div className="flex items-end gap-1 h-16">
+                    <div className="flex items-end gap-1 flex-1">
                       {[40, 65, 45, 80, 55, 90, 70, 85, 60, 95, 75, 88].map(
                         (height, i) => (
                           <div

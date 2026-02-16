@@ -1,8 +1,10 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useTheme } from "@/hooks/useTheme";
-import { Sparkles, Sun, Moon, X, ArrowRight } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { ModeToggle } from "@/components/ui/mode-toggle";
+import { Sparkles, X, ArrowRight } from "lucide-react";
+import Image from "next/image";
 
 const navLinks = [
   { label: "Features", href: "#features" },
@@ -12,10 +14,14 @@ const navLinks = [
 ];
 
 export function Navbar() {
-  const { theme, toggleTheme, mounted } = useTheme();
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [activeLink, setActiveLink] = useState("");
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   useEffect(() => {
     const handleScroll = () => {
@@ -50,7 +56,7 @@ export function Navbar() {
               <div className="flex items-center gap-2">
                 <Sparkles className="w-6 h-6 text-blue-600" />
                 <span className="text-xl font-bold gradient-text">
-                  Smart-Admin Copilot
+                  LexiChain
                 </span>
               </div>
             </div>
@@ -87,21 +93,50 @@ export function Navbar() {
               {/* Logo */}
               <a
                 href="#"
-                className="flex items-center gap-2 group"
+                className="flex items-center gap-3 group"
                 onClick={(e) => {
                   e.preventDefault();
                   window.scrollTo({ top: 0, behavior: "smooth" });
                 }}
               >
-                <div className="relative">
-                  <Sparkles className="w-6 h-6 text-blue-600 dark:text-blue-400 transition-transform duration-300 group-hover:rotate-12" />
-                  <div className="absolute inset-0 bg-blue-500/20 blur-lg rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+                <div className="relative flex items-center justify-center">
+                  {/* Subtle background badge */}
+                  <div
+                    className="
+        absolute inset-0 
+        rounded-xl 
+        bg-gradient-to-tr 
+        from-blue-500/10 
+        via-purple-500/10 
+        to-teal-500/10
+        opacity-0 
+        group-hover:opacity-100
+        transition-opacity duration-300
+      "
+                  />
+
+                  {/* Logo */}
+                  <Image
+                    src="/LexiChain.png"
+                    alt="LexiChain Logo"
+                    width={34}
+                    height={34}
+                    className="
+        relative z-10
+        w-8 h-8 object-contain
+        transition-all duration-300 ease-out
+        group-hover:scale-110
+      "
+                  />
                 </div>
-                <span className="text-lg md:text-xl font-bold gradient-text hidden sm:inline">
-                  Smart-Admin Copilot
-                </span>
-                <span className="text-lg font-bold gradient-text sm:hidden">
-                  SAC
+                <span
+                  className="
+      text-lg font-semibold
+      gradient-text
+      sm:hidden
+    "
+                >
+                  LC
                 </span>
               </a>
 
@@ -129,49 +164,29 @@ export function Navbar() {
               {/* Right Section */}
               <div className="flex items-center gap-2 md:gap-3">
                 {/* Theme Toggle */}
-                <button
-                  onClick={toggleTheme}
-                  className="relative p-1 rounded-full bg-slate-100 dark:bg-slate-800 transition-colors duration-300"
-                  aria-label="Toggle theme"
-                >
-                  <div className="flex items-center gap-1">
-                    <div
-                      className={`p-2 rounded-full transition-all duration-300 ${
-                        theme === "light"
-                          ? "bg-white shadow-sm text-amber-500"
-                          : "text-slate-400"
-                      }`}
-                    >
-                      <Sun className="w-4 h-4" />
-                    </div>
-                    <div
-                      className={`p-2 rounded-full transition-all duration-300 ${
-                        theme === "dark"
-                          ? "bg-slate-900 shadow-sm text-blue-400"
-                          : "text-slate-400"
-                      }`}
-                    >
-                      <Moon className="w-4 h-4" />
-                    </div>
-                  </div>
-                </button>
+                <ModeToggle />
 
                 {/* Sign In - Desktop */}
-                <button className="hidden md:flex items-center gap-2 px-5 py-2 text-sm font-medium text-slate-700 dark:text-slate-300 border border-slate-300 dark:border-slate-600 rounded-full hover:bg-slate-50 dark:hover:bg-slate-800 transition-all duration-200">
+                <Button
+                  variant="outline"
+                  className="hidden md:flex items-center gap-2 px-5 py-2 text-sm font-medium text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-600 rounded-full hover:bg-slate-50 dark:hover:bg-slate-800 transition-all duration-200"
+                >
                   Sign In
-                </button>
+                </Button>
 
                 {/* Get Started - Desktop */}
-                <button className="hidden md:flex items-center gap-2 px-6 py-2.5 text-sm font-semibold text-white btn-gradient rounded-full group">
+                <Button className="hidden md:flex items-center gap-2 px-6 py-2.5 text-sm font-semibold text-white btn-gradient rounded-full group">
                   Get Started
                   <ArrowRight className="w-4 h-4 transition-transform duration-300 group-hover:translate-x-1" />
-                </button>
+                </Button>
 
                 {/* Mobile Menu Button */}
-                <button
+                <Button
                   onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
                   className="lg:hidden p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors duration-200"
                   aria-label="Toggle menu"
+                  variant="ghost"
+                  size="icon"
                 >
                   <div className="relative w-6 h-6">
                     <span
@@ -190,7 +205,7 @@ export function Navbar() {
                       }`}
                     />
                   </div>
-                </button>
+                </Button>
               </div>
             </div>
           </div>
@@ -216,13 +231,15 @@ export function Navbar() {
           }`}
         >
           <div className="p-6 pt-20">
-            <button
+            <Button
               onClick={() => setIsMobileMenuOpen(false)}
               className="absolute top-6 right-6 p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
               aria-label="Close menu"
+              variant="ghost"
+              size="icon"
             >
               <X className="w-6 h-6" />
-            </button>
+            </Button>
 
             <div className="flex flex-col gap-4">
               {navLinks.map((link, index) => (
@@ -245,13 +262,16 @@ export function Navbar() {
             </div>
 
             <div className="mt-8 flex flex-col gap-3">
-              <button className="w-full px-5 py-3 text-sm font-medium text-slate-700 dark:text-slate-300 border border-slate-300 dark:border-slate-600 rounded-full hover:bg-slate-50 dark:hover:bg-slate-800 transition-all duration-200">
+              <Button
+                variant="outline"
+                className="w-full px-5 py-3 text-sm font-medium text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-600 rounded-full hover:bg-slate-50 dark:hover:bg-slate-800 transition-all duration-200"
+              >
                 Sign In
-              </button>
-              <button className="w-full flex items-center justify-center gap-2 px-6 py-3 text-sm font-semibold text-white btn-gradient rounded-full">
+              </Button>
+              <Button className="w-full flex items-center justify-center gap-2 px-6 py-3 text-sm font-semibold text-white btn-gradient rounded-full">
                 Get Started
                 <ArrowRight className="w-4 h-4" />
-              </button>
+              </Button>
             </div>
           </div>
         </div>

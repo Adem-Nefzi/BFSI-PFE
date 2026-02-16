@@ -14,16 +14,19 @@ import {
   Target,
 } from "lucide-react";
 import { useScrollAnimation } from "@/hooks/useScrollAnimation";
+import { GlowingEffect } from "@/components/ui/glowing-effect";
+import { BackgroundBeams } from "@/components/ui/background-beams";
 
-// Step Card Component
+// Step Card Component with Glowing Effect
 interface StepCardProps {
   number: string;
   title: string;
   description: string;
   icon: React.ElementType;
   gradient: string;
+  glowColor: string;
   delay: number;
-  isLast?: boolean;
+  children?: React.ReactNode;
 }
 
 function StepCard({
@@ -32,111 +35,95 @@ function StepCard({
   description,
   icon: Icon,
   gradient,
+  glowColor,
   delay,
-  isLast = false,
+  children,
 }: StepCardProps) {
   const { ref, isVisible } = useScrollAnimation<HTMLDivElement>({
-    threshold: 0.3,
+    threshold: 0.2,
   });
 
   return (
-    <div ref={ref} className="relative flex-1">
-      {/* Connector Line - Desktop */}
-      {!isLast && (
-        <>
-          {/* Horizontal connector for desktop */}
-          <div className="hidden md:block absolute top-12 left-[60%] w-[80%] h-0.5">
-            <div className="relative w-full h-full overflow-hidden">
+    <div
+      ref={ref}
+      className="relative h-full"
+      style={{
+        opacity: isVisible ? 1 : 0,
+        transform: isVisible ? "translateY(0)" : "translateY(40px)",
+        transition: `all 0.8s cubic-bezier(0.16, 1, 0.3, 1) ${delay}s`,
+      }}
+    >
+      {/* Glowing Border Card */}
+      <div className="relative h-full rounded-2xl border border-slate-200/80 dark:border-slate-700/80 p-2 hover:border-blue-500/40 dark:hover:border-blue-400/40 transition-colors duration-500 overflow-hidden">
+        {/* Rainbow Glowing Effect */}
+        <GlowingEffect
+          spread={60}
+          glow={true}
+          disabled={false}
+          proximity={100}
+          inactiveZone={0.01}
+          borderWidth={2}
+          variant="default"
+        />
+
+        <div className="relative h-full flex flex-col rounded-xl p-6 bg-white/90 dark:bg-slate-900/90 backdrop-blur-xl shadow-lg">
+          {/* Modern Number Badge */}
+          <div className="absolute -top-3 -right-3 z-10">
+            <div className="relative">
+              {/* Outer glow ring */}
               <div
-                className="absolute inset-0 bg-gradient-to-r from-blue-500 via-violet-500 to-teal-500"
-                style={{
-                  transform: isVisible ? "translateX(0)" : "translateX(-100%)",
-                  transition: `transform 1s ease-out ${delay + 0.3}s`,
-                }}
+                className={`absolute inset-0 ${gradient} rounded-2xl blur-xl opacity-60 animate-pulse-glow`}
+                style={{ padding: "4px" }}
               />
-              {/* Animated dots */}
-              <div
-                className="absolute top-1/2 -translate-y-1/2 w-2 h-2 rounded-full bg-violet-500"
-                style={{
-                  animationName: isVisible ? "move-right" : "none",
-                  animationDuration: isVisible ? "2s" : undefined,
-                  animationTimingFunction: isVisible ? "linear" : undefined,
-                  animationIterationCount: isVisible ? "infinite" : undefined,
-                  animationFillMode: "forwards",
-                  animationDelay: isVisible ? `${delay + 0.5}s` : undefined,
-                  opacity: isVisible ? 1 : 0,
-                  transition: `opacity 0.3s ease-out ${delay + 0.5}s`,
-                }}
-              />
+
+              {/* Badge container */}
+              <div className="relative">
+                {/* Glass background */}
+                <div className="absolute inset-0 bg-white/90 dark:bg-slate-900/90 backdrop-blur-xl rounded-2xl" />
+
+                {/* Gradient border */}
+                <div
+                  className={`absolute inset-0 ${gradient} rounded-2xl p-[2px]`}
+                >
+                  <div className="w-full h-full bg-white dark:bg-slate-900 rounded-2xl" />
+                </div>
+
+                {/* Number */}
+                <div className="relative px-4 py-2 flex items-center justify-center">
+                  <span
+                    className={`text-2xl font-black bg-gradient-to-br ${gradient.replace("bg-", "from-")} to-transparent bg-clip-text text-transparent`}
+                  >
+                    {number}
+                  </span>
+                </div>
+              </div>
             </div>
           </div>
 
-          {/* Vertical connector for mobile */}
-          <div className="md:hidden absolute top-20 left-8 w-0.5 h-[calc(100%-40px)]">
+          {/* Icon with Glow */}
+          <div className="relative inline-flex mb-6">
             <div
-              className="w-full h-full bg-gradient-to-b from-blue-500 via-violet-500 to-teal-500"
-              style={{
-                transform: isVisible ? "scaleY(1)" : "scaleY(0)",
-                transformOrigin: "top",
-                transition: `transform 1s ease-out ${delay + 0.3}s`,
-              }}
+              className={`absolute inset-0 ${gradient} rounded-2xl blur-2xl opacity-40 animate-pulse-glow`}
             />
-          </div>
-        </>
-      )}
-
-      {/* Card */}
-      <div
-        className="relative"
-        style={{
-          opacity: isVisible ? 1 : 0,
-          transform: isVisible ? "translateY(0)" : "translateY(30px)",
-          transition: `all 0.6s ease-out ${delay}s`,
-        }}
-      >
-        {/* Icon with Number */}
-        <div className="relative inline-block mb-6">
-          <div
-            className={`w-24 h-24 rounded-full ${gradient} flex items-center justify-center shadow-lg`}
-          >
-            <Icon className="w-10 h-10 text-white" />
+            <div
+              className={`relative w-20 h-20 rounded-2xl ${gradient} flex items-center justify-center shadow-2xl`}
+            >
+              <Icon className="w-10 h-10 text-white" />
+            </div>
           </div>
 
-          {/* Number Badge */}
-          <div
-            className="absolute -top-2 -right-2 w-10 h-10 rounded-full bg-slate-800 dark:bg-slate-700 flex items-center justify-center shadow-lg"
-            style={{
-              animationName: isVisible ? "bounce-subtle" : "none",
-              animationDuration: isVisible ? "0.5s" : undefined,
-              animationTimingFunction: isVisible ? "ease-out" : undefined,
-              animationDelay: `${delay + 0.2}s`,
-            }}
-          >
-            <span className="text-lg font-bold text-white">{number}</span>
+          {/* Content */}
+          <div className="flex-1">
+            <h3 className="text-xl md:text-2xl font-black text-slate-900 dark:text-white mb-3 leading-tight">
+              {title}
+            </h3>
+            <p className="text-sm md:text-base text-slate-600 dark:text-slate-400 leading-relaxed mb-4">
+              {description}
+            </p>
           </div>
 
-          {/* Glow Effect */}
-          <div
-            className={`absolute inset-0 rounded-full ${gradient} blur-xl opacity-50`}
-            style={{
-              animationName: isVisible ? "pulse-glow" : "none",
-              animationDuration: isVisible ? "3s" : undefined,
-              animationTimingFunction: isVisible ? "ease-in-out" : undefined,
-              animationIterationCount: isVisible ? "infinite" : undefined,
-              animationFillMode: "forwards",
-              animationDelay: isVisible ? `${delay + 0.5}s` : undefined,
-            }}
-          />
-        </div>
-
-        {/* Content */}
-        <div className="glass rounded-2xl p-6 hover-lift">
-          <h3 className="text-xl font-bold text-slate-800 dark:text-slate-200 mb-2">
-            {title}
-          </h3>
-          <p className="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">
-            {description}
-          </p>
+          {/* Animation Content */}
+          {children && <div className="mt-auto">{children}</div>}
         </div>
       </div>
     </div>
@@ -150,52 +137,54 @@ function UploadAnimation() {
   });
 
   return (
-    <div ref={ref} className="mt-6 glass rounded-xl p-4">
+    <div ref={ref} className="mt-4">
       {/* Drop Zone */}
       <div
-        className="border-2 border-dashed border-blue-300 dark:border-blue-700 rounded-lg p-6 text-center"
+        className="relative border-2 border-dashed border-blue-400/60 dark:border-blue-500/60 rounded-xl p-4 text-center overflow-hidden group hover:border-blue-500 dark:hover:border-blue-400 transition-colors"
         style={{
           opacity: isVisible ? 1 : 0,
           transform: isVisible ? "scale(1)" : "scale(0.95)",
           transition: "all 0.5s ease-out 0.3s",
         }}
       >
+        <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 via-violet-500/5 to-teal-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+
         <Upload
-          className="w-8 h-8 mx-auto text-blue-500 mb-2"
+          className="w-6 h-6 mx-auto text-blue-500 mb-2 relative z-10"
           style={{
             animation: isVisible
               ? "bounce-subtle 2s ease-in-out infinite"
               : "none",
           }}
         />
-        <p className="text-sm text-slate-600 dark:text-slate-400">
-          Drop files here or click to browse
+        <p className="text-xs text-slate-600 dark:text-slate-400 relative z-10">
+          Drop files here
         </p>
       </div>
 
       {/* File List */}
-      <div className="mt-4 space-y-2">
+      <div className="mt-3 space-y-2">
         {[
-          { name: "contract_v2.pdf", size: "2.4 MB", progress: 100 },
-          { name: "agreement_scan.jpg", size: "1.8 MB", progress: 75 },
+          { name: "contract.pdf", size: "2.4 MB", progress: 100 },
+          { name: "agreement.jpg", size: "1.8 MB", progress: 75 },
         ].map((file, i) => (
           <div
             key={i}
-            className="flex items-center gap-3 p-2 rounded-lg bg-white/50 dark:bg-slate-800/50"
+            className="flex items-center gap-2 p-2 rounded-lg bg-slate-50/80 dark:bg-slate-800/80 backdrop-blur-sm"
             style={{
               opacity: isVisible ? 1 : 0,
               transform: isVisible ? "translateX(0)" : "translateX(-20px)",
               transition: `all 0.4s ease-out ${0.5 + i * 0.2}s`,
             }}
           >
-            <FileText className="w-5 h-5 text-blue-500" />
+            <FileText className="w-4 h-4 text-blue-500 flex-shrink-0" />
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-slate-700 dark:text-slate-300 truncate">
+              <p className="text-xs font-medium text-slate-700 dark:text-slate-300 truncate">
                 {file.name}
               </p>
-              <div className="h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full mt-1 overflow-hidden">
+              <div className="h-1 bg-slate-200 dark:bg-slate-700 rounded-full mt-1 overflow-hidden">
                 <div
-                  className="h-full bg-gradient-to-r from-blue-500 to-violet-500 rounded-full transition-all duration-1000"
+                  className="h-full bg-gradient-to-r from-blue-500 via-violet-500 to-teal-500 rounded-full transition-all duration-1000"
                   style={{
                     width: isVisible ? `${file.progress}%` : "0%",
                     transitionDelay: `${0.8 + i * 0.2}s`,
@@ -203,23 +192,11 @@ function UploadAnimation() {
                 />
               </div>
             </div>
-            <span className="text-xs text-slate-500">{file.size}</span>
+            <span className="text-[10px] text-slate-500">{file.size}</span>
             {file.progress === 100 && (
-              <Check className="w-4 h-4 text-emerald-500" />
+              <Check className="w-3 h-3 text-emerald-500" />
             )}
           </div>
-        ))}
-      </div>
-
-      {/* Format Badges */}
-      <div className="mt-4 flex gap-2 justify-center">
-        {["PDF", "JPG", "PNG"].map((format, i) => (
-          <span
-            key={i}
-            className="px-2 py-1 text-xs font-medium rounded-full bg-blue-500/10 text-blue-600 dark:text-blue-400"
-          >
-            {format}
-          </span>
         ))}
       </div>
     </div>
@@ -241,72 +218,58 @@ function AIAnalysisAnimation() {
   );
 
   const analysisPoints = [
-    { label: "Clauses detected", value: "47", icon: Target },
-    {
-      label: "Risk assessment",
-      value: "Low",
-      icon: Shield,
-      color: "text-emerald-500",
-    },
-    {
-      label: "Processing time",
-      value: "2.3s",
-      icon: Zap,
-      color: "text-amber-500",
-    },
+    { label: "Clauses", value: "47", icon: Target, color: "text-blue-500" },
+    { label: "Risk", value: "Low", icon: Shield, color: "text-emerald-500" },
+    { label: "Speed", value: "2.3s", icon: Zap, color: "text-amber-500" },
   ];
 
   return (
-    <div ref={ref} className="mt-6 glass rounded-xl p-4">
+    <div ref={ref} className="mt-4">
       {/* AI Brain */}
-      <div className="flex justify-center mb-4">
-        <div
-          className="relative"
-          style={{
-            animation: isVisible
-              ? "pulse-glow 2s ease-in-out infinite"
-              : "none",
-          }}
-        >
-          <div className="w-16 h-16 rounded-full bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center">
-            <Cpu className="w-8 h-8 text-white" />
+      <div className="flex justify-center mb-3">
+        <div className="relative">
+          <div
+            className="absolute inset-0 bg-gradient-to-br from-violet-500 to-purple-600 rounded-2xl blur-xl opacity-60"
+            style={{
+              animation: isVisible
+                ? "pulse-glow 2s ease-in-out infinite"
+                : "none",
+            }}
+          />
+          <div className="relative w-14 h-14 rounded-2xl bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center shadow-xl">
+            <Cpu className="w-7 h-7 text-white" />
           </div>
           <div className="absolute -top-1 -right-1">
-            <Sparkles className="w-5 h-5 text-amber-400 animate-pulse" />
+            <Sparkles className="w-4 h-4 text-amber-400 animate-pulse" />
           </div>
         </div>
       </div>
 
-      {/* Analysis Progress */}
-      <div className="space-y-3">
+      {/* Analysis Points */}
+      <div className="grid grid-cols-3 gap-2">
         {analysisPoints.map((point, i) => (
           <div
             key={i}
-            className="flex items-center justify-between p-2 rounded-lg bg-white/50 dark:bg-slate-800/50"
+            className="p-2 rounded-lg bg-slate-50/80 dark:bg-slate-800/80 backdrop-blur-sm text-center"
             style={{
               opacity: isVisible ? 1 : 0,
-              transform: isVisible ? "translateY(0)" : "translateY(10px)",
+              transform: isVisible ? "scale(1)" : "scale(0.9)",
               transition: `all 0.4s ease-out ${0.3 + i * 0.15}s`,
             }}
           >
-            <div className="flex items-center gap-2">
-              <point.icon
-                className={`w-4 h-4 ${point.color || "text-blue-500"}`}
-              />
-              <span className="text-sm text-slate-600 dark:text-slate-400">
-                {point.label}
-              </span>
-            </div>
-            <span className="text-sm font-bold text-slate-800 dark:text-slate-200">
+            <point.icon className={`w-4 h-4 mx-auto mb-1 ${point.color}`} />
+            <p className="text-xs font-bold text-slate-800 dark:text-slate-200">
               {point.value}
-            </span>
+            </p>
+            <p className="text-[10px] text-slate-500">{point.label}</p>
           </div>
         ))}
       </div>
 
-      {/* Scanning Effect */}
-      <div className="mt-4 relative h-20 rounded-lg bg-slate-100 dark:bg-slate-800 overflow-hidden">
-        <div className="absolute inset-0 flex items-center justify-center gap-1 opacity-30">
+      {/* Scanning Bar with Waveform */}
+      <div className="mt-3 relative h-12 rounded-lg bg-slate-100/80 dark:bg-slate-800/80 overflow-hidden">
+        {/* Background waveform */}
+        <div className="absolute inset-0 flex items-center justify-center gap-0.5 opacity-20">
           {scanHeights.map((height, i) => (
             <div
               key={i}
@@ -315,12 +278,13 @@ function AIAnalysisAnimation() {
             />
           ))}
         </div>
+        {/* Scanning line */}
         <div
-          className="absolute top-0 bottom-0 w-1 bg-gradient-to-b from-blue-500 via-violet-500 to-transparent"
+          className="absolute top-0 bottom-0 w-0.5 bg-gradient-to-b from-violet-500 via-purple-500 to-transparent"
           style={{
             left: isVisible ? "100%" : "0%",
             transition: "left 2s ease-in-out 0.5s",
-            boxShadow: "0 0 20px rgba(59, 130, 246, 0.5)",
+            boxShadow: "0 0 20px rgba(139, 92, 246, 0.6)",
           }}
         />
       </div>
@@ -335,20 +299,17 @@ function ChatStepAnimation() {
   });
 
   const messages = [
-    { text: "Explain the termination clause", isUser: true },
-    {
-      text: "Section 12.3: Either party may terminate with 30 days written notice...",
-      isUser: false,
-    },
+    { text: "Explain termination clause", isUser: true },
+    { text: "Section 12.3: 30 days notice...", isUser: false },
   ];
 
   return (
-    <div ref={ref} className="mt-6 glass rounded-xl p-4">
-      <div className="space-y-3">
+    <div ref={ref} className="mt-4">
+      <div className="space-y-2">
         {messages.map((msg, i) => (
           <div
             key={i}
-            className={`flex ${msg.isUser ? "justify-end" : "justify-start"}`}
+            className={`flex ${msg.isUser ? "justify-end" : "justify-start"} items-end gap-2`}
             style={{
               opacity: isVisible ? 1 : 0,
               transform: isVisible ? "translateY(0)" : "translateY(10px)",
@@ -356,12 +317,12 @@ function ChatStepAnimation() {
             }}
           >
             {!msg.isUser && (
-              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-teal-500 to-cyan-600 flex items-center justify-center mr-2 flex-shrink-0">
-                <Sparkles className="w-4 h-4 text-white" />
+              <div className="w-6 h-6 rounded-full bg-gradient-to-br from-teal-500 to-cyan-600 flex items-center justify-center flex-shrink-0 shadow-lg">
+                <Sparkles className="w-3 h-3 text-white" />
               </div>
             )}
             <div
-              className={`max-w-[80%] px-4 py-2 rounded-2xl text-sm ${
+              className={`max-w-[75%] px-3 py-2 rounded-xl text-xs shadow-sm ${
                 msg.isUser
                   ? "bg-blue-600 text-white rounded-tr-sm"
                   : "bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-tl-sm"
@@ -375,27 +336,22 @@ function ChatStepAnimation() {
 
       {/* RAG Indicator */}
       <div
-        className="mt-4 flex items-center justify-center gap-2 text-xs text-slate-500"
+        className="mt-3 flex items-center justify-center gap-1.5 text-[10px] text-slate-500"
         style={{
           opacity: isVisible ? 1 : 0,
           transition: "opacity 0.4s ease-out 1.2s",
         }}
       >
-        <div className="flex gap-1">
-          <span
-            className="w-2 h-2 rounded-full bg-teal-500 animate-pulse"
-            style={{ animationDelay: "0s" }}
-          />
-          <span
-            className="w-2 h-2 rounded-full bg-teal-500 animate-pulse"
-            style={{ animationDelay: "0.2s" }}
-          />
-          <span
-            className="w-2 h-2 rounded-full bg-teal-500 animate-pulse"
-            style={{ animationDelay: "0.4s" }}
-          />
+        <div className="flex gap-0.5">
+          {[0, 0.2, 0.4].map((delay, i) => (
+            <span
+              key={i}
+              className="w-1.5 h-1.5 rounded-full bg-teal-500 animate-pulse"
+              style={{ animationDelay: `${delay}s` }}
+            />
+          ))}
         </div>
-        <span>Powered by RAG</span>
+        <span>RAG Powered</span>
       </div>
     </div>
   );
@@ -408,69 +364,58 @@ function BlockchainStepAnimation() {
   });
 
   return (
-    <div ref={ref} className="mt-6 glass rounded-xl p-4">
-      {/* Blockchain Visual */}
-      <div className="relative h-24 mb-4">
-        <div className="flex items-center justify-center gap-4">
-          {[0, 1, 2].map((i) => (
-            <div key={i} className="relative">
-              <div
-                className="w-12 h-12 rounded-lg bg-gradient-to-br from-emerald-500 to-green-600 flex items-center justify-center shadow-lg"
-                style={{
-                  opacity: isVisible ? 1 : 0,
-                  transform: isVisible ? "scale(1)" : "scale(0.8)",
-                  transition: `all 0.4s ease-out ${0.2 + i * 0.2}s`,
-                }}
-              >
-                <Link className="w-6 h-6 text-white" />
-              </div>
-              {i < 2 && (
-                <div
-                  className="absolute top-1/2 -right-4 w-8 h-0.5 bg-emerald-500/50"
-                  style={{
-                    transform: isVisible ? "scaleX(1)" : "scaleX(0)",
-                    transformOrigin: "left",
-                    transition: `transform 0.3s ease-out ${0.4 + i * 0.2}s`,
-                  }}
-                />
-              )}
+    <div ref={ref} className="mt-4">
+      {/* Blockchain Chain */}
+      <div className="flex items-center justify-center gap-2 mb-3">
+        {[0, 1, 2].map((i) => (
+          <div key={i} className="relative">
+            <div
+              className="w-10 h-10 rounded-lg bg-gradient-to-br from-emerald-500 to-green-600 flex items-center justify-center shadow-lg"
+              style={{
+                opacity: isVisible ? 1 : 0,
+                transform: isVisible ? "scale(1)" : "scale(0.8)",
+                transition: `all 0.4s ease-out ${0.2 + i * 0.2}s`,
+              }}
+            >
+              <Link className="w-5 h-5 text-white" />
             </div>
-          ))}
-        </div>
+            {i < 2 && (
+              <div
+                className="absolute top-1/2 -right-2 w-4 h-0.5 bg-gradient-to-r from-emerald-500 to-green-500"
+                style={{
+                  transform: isVisible ? "scaleX(1)" : "scaleX(0)",
+                  transformOrigin: "left",
+                  transition: `transform 0.3s ease-out ${0.4 + i * 0.2}s`,
+                }}
+              />
+            )}
+          </div>
+        ))}
       </div>
 
       {/* Certificate */}
       <div
-        className="glass rounded-lg p-3 border border-emerald-500/30"
+        className="rounded-xl p-3 bg-gradient-to-br from-emerald-50 to-green-50 dark:from-emerald-950/30 dark:to-green-950/30 border border-emerald-200/50 dark:border-emerald-700/50"
         style={{
           opacity: isVisible ? 1 : 0,
           transform: isVisible ? "translateY(0)" : "translateY(10px)",
           transition: "all 0.5s ease-out 0.8s",
         }}
       >
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-full bg-emerald-500/20 flex items-center justify-center">
-            <Shield className="w-5 h-5 text-emerald-500" />
+        <div className="flex items-center gap-2">
+          <div className="w-8 h-8 rounded-lg bg-emerald-500/20 flex items-center justify-center flex-shrink-0">
+            <Shield className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
           </div>
-          <div className="flex-1">
-            <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">
-              Verified on Polygon
+          <div className="flex-1 min-w-0">
+            <p className="text-xs font-bold text-emerald-900 dark:text-emerald-100">
+              Polygon Verified
             </p>
-            <p className="text-xs font-mono text-slate-500">0x3f7a...9e2d</p>
+            <p className="text-[10px] font-mono text-emerald-700 dark:text-emerald-300 truncate">
+              0x3f7a...9e2d
+            </p>
           </div>
-          <Check className="w-5 h-5 text-emerald-500" />
+          <Check className="w-4 h-4 text-emerald-600 dark:text-emerald-400 flex-shrink-0" />
         </div>
-      </div>
-
-      {/* Timestamp */}
-      <div
-        className="mt-3 text-center text-xs text-slate-500"
-        style={{
-          opacity: isVisible ? 1 : 0,
-          transition: "opacity 0.4s ease-out 1.2s",
-        }}
-      >
-        Timestamped: {new Date().toLocaleString()}
       </div>
     </div>
   );
@@ -483,38 +428,42 @@ export function HowItWorks() {
   const steps = [
     {
       number: "01",
-      title: "Upload Your Contract",
+      title: "Upload Contract",
       description:
-        "PDF, images, or scanned documents. Simply drag and drop or click to browse.",
+        "PDF, images, or scans. Drag and drop or browse to upload instantly.",
       icon: Upload,
       gradient: "bg-gradient-to-br from-blue-500 to-blue-600",
+      glowColor: "rgba(59, 130, 246, 0.5)",
       animation: <UploadAnimation />,
     },
     {
       number: "02",
-      title: "AI Extracts & Analyzes",
+      title: "AI Analysis",
       description:
-        "GPT-4 Turbo understands your contract deeply. Automatic extraction of all important clauses and terms.",
+        "GPT-4 Turbo extracts and analyzes every clause, term, and detail automatically.",
       icon: Cpu,
       gradient: "bg-gradient-to-br from-violet-500 to-purple-600",
+      glowColor: "rgba(139, 92, 246, 0.5)",
       animation: <AIAnalysisAnimation />,
     },
     {
       number: "03",
-      title: "Chat with AI Assistant",
+      title: "Chat with AI",
       description:
-        "Get instant answers to any questions. Powered by RAG for precise, context-aware responses.",
+        "Ask anything. Get instant, precise answers powered by RAG technology.",
       icon: MessageSquare,
       gradient: "bg-gradient-to-br from-teal-500 to-cyan-600",
+      glowColor: "rgba(20, 184, 166, 0.5)",
       animation: <ChatStepAnimation />,
     },
     {
       number: "04",
-      title: "Immutable Certification",
+      title: "Blockchain Proof",
       description:
-        "Registered on Polygon blockchain. Legally valid timestamped proof of submission.",
+        "Immutable certification on Polygon. Legally valid timestamped proof.",
       icon: Shield,
       gradient: "bg-gradient-to-br from-emerald-500 to-green-600",
+      glowColor: "rgba(16, 185, 129, 0.5)",
       animation: <BlockchainStepAnimation />,
     },
   ];
@@ -522,14 +471,14 @@ export function HowItWorks() {
   return (
     <section
       id="how-it-works"
-      className="relative py-24 px-4 sm:px-6 lg:px-8 overflow-hidden"
+      className="relative py-20 px-4 sm:px-6 lg:px-8 overflow-hidden"
     >
-      {/* Background */}
-      <div className="absolute inset-0 bg-slate-50 dark:bg-slate-900/50">
-        <div className="absolute inset-0 grid-pattern opacity-50" />
+      {/* Background with Beams */}
+      <div className="absolute inset-0 bg-gradient-to-b from-slate-50 via-blue-50/30 to-slate-50 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950">
+        <BackgroundBeams className="opacity-55" />
       </div>
 
-      <div className="relative max-w-7xl mx-auto">
+      <div className="relative z-10 max-w-7xl mx-auto">
         {/* Section Header */}
         <div
           ref={headerRef}
@@ -537,58 +486,44 @@ export function HowItWorks() {
           style={{
             opacity: headerVisible ? 1 : 0,
             transform: headerVisible ? "translateY(0)" : "translateY(30px)",
-            transition: "all 0.6s ease-out",
+            transition: "all 0.8s cubic-bezier(0.16, 1, 0.3, 1)",
           }}
         >
-          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full glass mb-6">
+          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full glass mb-6 shadow-lg">
             <Target className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-            <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
+            <span className="text-sm font-bold text-slate-700 dark:text-slate-300">
               Simple Process
             </span>
           </div>
 
-          <h2 className="text-4xl md:text-5xl font-bold text-slate-900 dark:text-white mb-4">
+          <h2 className="text-3xl md:text-5xl font-black text-slate-900 dark:text-white mb-4 leading-tight">
             From Upload to Certification in{" "}
-            <span className="gradient-text">4 Steps</span>
+            <span className="gradient-text">4 Easy Steps</span>
           </h2>
 
-          <p className="text-xl text-slate-600 dark:text-slate-400 max-w-2xl mx-auto">
+          <p className="text-lg md:text-xl text-slate-600 dark:text-slate-400 max-w-2xl mx-auto">
             Our intelligent system handles everything automatically
           </p>
         </div>
 
-        {/* Steps Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 lg:gap-6">
+        {/* Steps Grid - Better Alignment */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 lg:gap-4">
           {steps.map((step, index) => (
-            <div key={step.number} className="relative">
-              <StepCard
-                number={step.number}
-                title={step.title}
-                description={step.description}
-                icon={step.icon}
-                gradient={step.gradient}
-                delay={index * 0.15}
-                isLast={index === steps.length - 1}
-              />
+            <StepCard
+              key={step.number}
+              number={step.number}
+              title={step.title}
+              description={step.description}
+              icon={step.icon}
+              gradient={step.gradient}
+              glowColor={step.glowColor}
+              delay={index * 0.1}
+            >
               {step.animation}
-            </div>
+            </StepCard>
           ))}
         </div>
       </div>
-
-      {/* Custom Animation Keyframes */}
-      <style>{`
-        @keyframes move-right {
-          0% {
-            left: 0;
-            opacity: 1;
-          }
-          100% {
-            left: 100%;
-            opacity: 0;
-          }
-        }
-      `}</style>
     </section>
   );
 }

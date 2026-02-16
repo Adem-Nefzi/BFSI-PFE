@@ -10,6 +10,9 @@ import {
   Award,
   Check,
 } from "lucide-react";
+import { BentoGrid } from "@/components/ui/bento-grid";
+import { Spotlight } from "@/components/ui/spotlight-new";
+import { GlowingEffect } from "@/components/ui/glowing-effect";
 import { useScrollAnimation } from "@/hooks/useScrollAnimation";
 
 // Count Up Hook
@@ -55,7 +58,11 @@ function useCountUp(
 
       // Ease out cubic
       const easeOut = 1 - Math.pow(1 - progress, 3);
-      setCount(Math.floor(end * easeOut));
+      const nextValue = end * easeOut;
+      const formattedValue = Number.isInteger(end)
+        ? Math.floor(nextValue)
+        : Number(nextValue.toFixed(1));
+      setCount(formattedValue);
 
       if (progress < 1) {
         animationFrame = requestAnimationFrame(animate);
@@ -83,6 +90,16 @@ interface StatCardProps {
   label: string;
   icon: React.ElementType;
   gradient: string;
+  className?: string;
+  cardColor?: string;
+  glowColor?: string;
+  spotlight?: {
+    gradientFirst?: string;
+    gradientSecond?: string;
+    gradientThird?: string;
+    duration?: number;
+    xOffset?: number;
+  };
   delay: number;
   additional?: string;
   isText?: boolean;
@@ -96,6 +113,10 @@ function StatCard({
   label,
   icon: Icon,
   gradient,
+  className,
+  cardColor,
+  glowColor,
+  spotlight,
   delay,
   additional,
   isText = false,
@@ -108,101 +129,98 @@ function StatCard({
   return (
     <div
       ref={scrollRef}
-      className="relative group"
+      className={`relative ${className || ""}`}
       style={{
         opacity: isVisible ? 1 : 0,
         transform: isVisible ? "translateY(0)" : "translateY(30px)",
         transition: `all 0.6s ease-out ${delay}s`,
       }}
     >
-      <div className="relative glass rounded-3xl p-8 hover-lift overflow-hidden">
+      <div
+        className={`relative h-full overflow-hidden rounded-2xl border border-border/60 p-7 shadow-[0_20px_60px_-30px_rgba(15,23,42,0.25)] backdrop-blur group ${cardColor || "bg-card/80"}`}
+      >
+        {/* Glowing Effect */}
+        <GlowingEffect
+          disabled={false}
+          blur={40}
+          spread={60}
+          proximity={80}
+          variant="default"
+          borderWidth={2}
+          className="opacity-0 group-hover:opacity-100 transition-opacity duration-500"
+        />
+
+        <div className="absolute inset-0">
+          <Spotlight
+            gradientFirst={spotlight?.gradientFirst}
+            gradientSecond={spotlight?.gradientSecond}
+            gradientThird={spotlight?.gradientThird}
+            duration={spotlight?.duration ?? 8}
+            xOffset={spotlight?.xOffset ?? 120}
+          />
+        </div>
+
+        {/* Hover Glow */}
+        {glowColor && (
+          <div
+            className={`absolute -inset-1 ${glowColor} opacity-0 group-hover:opacity-20 blur-2xl transition-opacity duration-500 rounded-2xl`}
+          />
+        )}
+
         {/* Background Icon */}
-        <div className="absolute top-4 right-4 opacity-10">
-          <Icon className="w-24 h-24 text-white" />
+        <div className="absolute -top-6 -right-6 opacity-10">
+          <Icon className="w-28 h-28 text-foreground" />
         </div>
 
         {/* Content */}
-        <div className="relative z-10">
-          {/* Icon */}
-          <div
-            className={`inline-flex p-3 rounded-2xl ${gradient} mb-6 shadow-lg`}
-          >
-            <Icon className="w-8 h-8 text-white" />
-          </div>
-
-          {/* Value */}
-          <div ref={countRef} className="mb-2">
-            {isText ? (
-              <span className="text-5xl md:text-6xl lg:text-7xl font-black text-white tracking-wider">
-                {value}
+        <div className="relative z-10 flex h-full flex-col justify-between">
+          <div>
+            {/* Icon */}
+            <div
+              className={`inline-flex items-center gap-2 rounded-full ${gradient} px-4 py-2 text-foreground shadow-lg`}
+            >
+              <Icon className="w-4 h-4" />
+              <span className="text-xs font-semibold tracking-widest uppercase text-foreground/80">
+                Performance
               </span>
-            ) : (
-              <span className="text-5xl md:text-6xl lg:text-7xl font-black text-white">
-                {prefix}
-                {numericValue !== undefined ? count : value}
-                {suffix}
-              </span>
-            )}
-          </div>
+            </div>
 
-          {/* Label */}
-          <p className="text-lg md:text-xl font-medium text-white/90 mb-2">
-            {label}
-          </p>
+            {/* Value */}
+            <div ref={countRef} className="mt-6">
+              {isText ? (
+                <span className="text-4xl md:text-5xl lg:text-6xl font-semibold text-foreground tracking-tight">
+                  {value}
+                </span>
+              ) : (
+                <span className="text-4xl md:text-5xl lg:text-6xl font-semibold text-foreground tracking-tight">
+                  {prefix}
+                  {numericValue !== undefined && !Number.isInteger(numericValue)
+                    ? count.toFixed(1)
+                    : numericValue !== undefined
+                      ? count
+                      : value}
+                  {suffix}
+                </span>
+              )}
+            </div>
+
+            {/* Label */}
+            <p className="mt-4 text-base md:text-lg font-medium text-foreground/90">
+              {label}
+            </p>
+          </div>
 
           {/* Additional Info */}
           {additional && (
-            <div className="flex items-center gap-2 mt-3">
-              <TrendingUp className="w-4 h-4 text-emerald-400" />
-              <span className="text-sm text-white/70">{additional}</span>
+            <div className="flex items-center gap-2 pt-6">
+              <TrendingUp className="w-4 h-4 text-emerald-500" />
+              <span className="text-sm text-muted-foreground">
+                {additional}
+              </span>
             </div>
           )}
         </div>
-
-        {/* Glow Effect */}
-        <div
-          className={`absolute -inset-px ${gradient} opacity-0 group-hover:opacity-30 rounded-3xl blur-xl transition-opacity duration-500`}
-        />
       </div>
-    </div>
-  );
-}
-
-// Floating Badge Component
-function FloatingBadge({
-  text,
-  icon: Icon,
-  delay,
-  position,
-}: {
-  text: string;
-  icon: React.ElementType;
-  delay: number;
-  position: { top?: string; bottom?: string; left?: string; right?: string };
-}) {
-  const { ref, isVisible } = useScrollAnimation<HTMLDivElement>({
-    threshold: 0.5,
-  });
-
-  return (
-    <div
-      ref={ref}
-      className="absolute glass rounded-full px-3 py-1.5 flex items-center gap-2 shadow-lg"
-      style={{
-        ...position,
-        opacity: isVisible ? 1 : 0,
-        transform: isVisible ? "translateY(0)" : "translateY(20px)",
-        transition: `all 0.5s ease-out ${delay}s`,
-        animationName: isVisible ? "float" : "none",
-        animationDuration: isVisible ? "4s" : undefined,
-        animationTimingFunction: isVisible ? "ease-in-out" : undefined,
-        animationIterationCount: isVisible ? "infinite" : undefined,
-        animationFillMode: "forwards",
-        animationDelay: isVisible ? `${delay}s` : undefined,
-      }}
-    >
-      <Icon className="w-4 h-4 text-blue-400" />
-      <span className="text-xs font-medium text-white">{text}</span>
     </div>
   );
 }
@@ -219,6 +237,16 @@ export function Stats() {
     label: string;
     icon: React.ElementType;
     gradient: string;
+    className?: string;
+    cardColor?: string;
+    glowColor?: string;
+    spotlight?: {
+      gradientFirst?: string;
+      gradientSecond?: string;
+      gradientThird?: string;
+      duration?: number;
+      xOffset?: number;
+    };
     additional?: string;
     isText?: boolean;
   }
@@ -226,19 +254,38 @@ export function Stats() {
   const stats: StatItem[] = [
     {
       value: "99.9",
-      numericValue: 99,
+      numericValue: 99.9,
       suffix: "%",
       label: "OCR + AI Accuracy",
       icon: Target,
-      gradient: "bg-gradient-to-br from-blue-500 to-blue-600",
+      gradient: "bg-gradient-to-r from-blue-500 to-indigo-600",
+      cardColor:
+        "bg-gradient-to-br from-blue-50/80 to-indigo-50/80 dark:from-blue-950/30 dark:to-indigo-950/30",
+      glowColor: "bg-blue-500",
+      className: "md:col-span-2",
+      spotlight: {
+        gradientFirst:
+          "radial-gradient(68.54% 68.72% at 55.02% 31.46%, hsla(217, 91%, 60%, .28) 0, hsla(217, 91%, 60%, .12) 55%, hsla(217, 91%, 60%, 0) 80%)",
+        gradientSecond:
+          "radial-gradient(50% 50% at 50% 50%, hsla(258, 90%, 66%, .24) 0, hsla(258, 90%, 66%, .08) 80%, transparent 100%)",
+        gradientThird:
+          "radial-gradient(50% 50% at 50% 50%, hsla(217, 91%, 60%, .18) 0, hsla(217, 91%, 60%, .06) 80%, transparent 100%)",
+      },
       additional: "+0.3% this month",
     },
     {
       value: "< 3",
       label: "Average AI Response Time",
       icon: Zap,
-      gradient: "bg-gradient-to-br from-amber-500 to-orange-600",
-      additional: "Lightning fast",
+      gradient: "bg-gradient-to-r from-amber-500 to-orange-600",
+      cardColor:
+        "bg-gradient-to-br from-amber-50/80 to-orange-50/80 dark:from-amber-950/30 dark:to-orange-950/30",
+      glowColor: "bg-amber-500",
+      spotlight: {
+        gradientFirst:
+          "radial-gradient(68.54% 68.72% at 55.02% 31.46%, hsla(48, 96%, 53%, .28) 0, hsla(48, 96%, 53%, .12) 55%, hsla(48, 96%, 53%, 0) 80%)",
+      },
+      additional: "Average under 3 seconds",
       isText: true,
     },
     {
@@ -247,109 +294,75 @@ export function Stats() {
       suffix: "%",
       label: "Blockchain Verified",
       icon: Shield,
-      gradient: "bg-gradient-to-br from-violet-500 to-purple-600",
+      gradient: "bg-gradient-to-r from-emerald-500 to-teal-600",
+      cardColor:
+        "bg-gradient-to-br from-emerald-50/80 to-teal-50/80 dark:from-emerald-950/30 dark:to-teal-950/30",
+      glowColor: "bg-emerald-500",
+      spotlight: {
+        gradientFirst:
+          "radial-gradient(68.54% 68.72% at 55.02% 31.46%, hsla(158, 64%, 52%, .28) 0, hsla(158, 64%, 52%, .12) 55%, hsla(158, 64%, 52%, 0) 80%)",
+      },
       additional: "All documents certified",
     },
     {
       value: "GDPR",
       label: "Full European Compliance",
       icon: Lock,
-      gradient: "bg-gradient-to-br from-emerald-500 to-green-600",
-      additional: "ISO 27001 Certified",
+      gradient: "bg-gradient-to-r from-violet-500 to-purple-600",
+      cardColor:
+        "bg-gradient-to-br from-violet-50/80 to-purple-50/80 dark:from-violet-950/30 dark:to-purple-950/30",
+      glowColor: "bg-violet-500",
+      className: "md:col-span-2",
+      spotlight: {
+        gradientFirst:
+          "radial-gradient(68.54% 68.72% at 55.02% 31.46%, hsla(258, 90%, 66%, .28) 0, hsla(258, 90%, 66%, .12) 55%, hsla(258, 90%, 66%, 0) 80%)",
+      },
+      additional: "ISO 27001 certified",
       isText: true,
-    },
-  ];
-
-  const floatingBadges = [
-    {
-      text: "+1 Verified",
-      icon: Check,
-      position: { top: "10%", left: "5%" },
-      delay: 0.8,
-    },
-    {
-      text: "99.9% Uptime",
-      icon: Shield,
-      position: { top: "20%", right: "8%" },
-      delay: 1,
-    },
-    {
-      text: "AI Powered",
-      icon: Zap,
-      position: { bottom: "15%", left: "10%" },
-      delay: 1.2,
-    },
-    {
-      text: "Secure",
-      icon: Lock,
-      position: { bottom: "25%", right: "5%" },
-      delay: 1.4,
     },
   ];
 
   return (
     <section
       id="stats"
-      className="relative py-24 px-4 sm:px-6 lg:px-8 overflow-hidden"
+      className="relative py-16 px-4 sm:px-6 lg:px-8 overflow-hidden"
     >
       {/* Gradient Background */}
-      <div className="absolute inset-0 bg-gradient-to-br from-blue-600 via-violet-600 to-teal-600">
+      <div className="absolute inset-0 bg-gradient-to-br from-background via-muted/40 to-background">
         {/* Grid Pattern Overlay */}
-        <div className="absolute inset-0 grid-pattern opacity-20" />
+        <div className="absolute inset-0 grid-pattern opacity-15" />
 
         {/* Radial Glow */}
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(255,255,255,0.1)_0%,transparent_70%)]" />
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,hsla(var(--primary),0.2)_0%,transparent_55%)]" />
       </div>
-
-      {/* Floating Badges */}
-      {floatingBadges.map((badge, i) => (
-        <FloatingBadge
-          key={i}
-          text={badge.text}
-          icon={badge.icon}
-          delay={badge.delay}
-          position={badge.position}
-        />
-      ))}
 
       <div className="relative max-w-7xl mx-auto">
         {/* Section Header */}
         <div
           ref={headerRef}
-          className="text-center mb-16"
+          className="text-center mb-14"
           style={{
             opacity: headerVisible ? 1 : 0,
             transform: headerVisible ? "translateY(0)" : "translateY(30px)",
             transition: "all 0.6s ease-out",
           }}
         >
-          <span className="inline-block text-sm uppercase tracking-widest text-white/70 mb-4">
-            By The Numbers
+          <span className="inline-flex items-center gap-2 rounded-full border border-border/60 bg-card/60 px-4 py-1 text-xs uppercase tracking-[0.3em] text-muted-foreground">
+            Platform Metrics
           </span>
 
-          <h2 className="text-4xl md:text-5xl lg:text-6xl font-black text-white mb-4">
-            Results That{" "}
-            <span className="relative">
-              Speak
-              <svg
-                className="absolute -bottom-2 left-0 w-full"
-                viewBox="0 0 200 12"
-                fill="none"
-              >
-                <path
-                  d="M2 10C50 2 150 2 198 10"
-                  stroke="rgba(255,255,255,0.5)"
-                  strokeWidth="3"
-                  strokeLinecap="round"
-                  className="animate-pulse"
-                />
-              </svg>
-            </span>
+          <h2 className="mt-6 text-4xl md:text-5xl lg:text-6xl font-semibold text-foreground">
+            Corporate-Grade Results, Measured.
           </h2>
+
+          <p className="mt-4 text-base md:text-lg text-muted-foreground max-w-2xl mx-auto">
+            Transparent performance benchmarks that prove reliability, accuracy,
+            and compliance at enterprise scale.
+          </p>
         </div>
 
         {/* Stats Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 lg:gap-8">
+        <BentoGrid className="max-w-6xl gap-6 md:auto-rows-[16rem]">
           {stats.map((stat, index) => (
             <StatCard
               key={stat.label}
@@ -360,39 +373,16 @@ export function Stats() {
               label={stat.label}
               icon={stat.icon}
               gradient={stat.gradient}
+              className={stat.className}
+              cardColor={stat.cardColor}
+              glowColor={stat.glowColor}
+              spotlight={stat.spotlight}
               delay={index * 0.1}
               additional={stat.additional}
               isText={stat.isText}
             />
           ))}
-        </div>
-
-        {/* Bottom Awards Row */}
-        <div
-          className="mt-16 flex flex-wrap items-center justify-center gap-4"
-          style={{
-            opacity: headerVisible ? 1 : 0,
-            transform: headerVisible ? "translateY(0)" : "translateY(20px)",
-            transition: "all 0.6s ease-out 0.5s",
-          }}
-        >
-          {[
-            { icon: Award, text: "Best AI Solution 2024" },
-            { icon: Shield, text: "SOC 2 Type II Certified" },
-            { icon: Lock, text: "GDPR Compliant" },
-            { icon: Check, text: "ISO 27001 Certified" },
-          ].map((award, i) => (
-            <div
-              key={i}
-              className="flex items-center gap-2 px-4 py-2 rounded-full bg-white/10 backdrop-blur-sm border border-white/20"
-            >
-              <award.icon className="w-4 h-4 text-white/80" />
-              <span className="text-sm font-medium text-white/90">
-                {award.text}
-              </span>
-            </div>
-          ))}
-        </div>
+        </BentoGrid>
       </div>
     </section>
   );

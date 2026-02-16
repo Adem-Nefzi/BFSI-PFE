@@ -1,176 +1,159 @@
-'use client';
-import { useScrollAnimation } from '@/hooks/useScrollAnimation';
-import { 
-  MessageSquare, 
-  Brain, 
-  Shield, 
-  BarChart3, 
-  Bell, 
+"use client";
+import { useScrollAnimation } from "@/hooks/useScrollAnimation";
+import {
+  MessageSquare,
+  Brain,
+  Shield,
+  BarChart3,
+  Bell,
   Lock,
   Sparkles,
   Link,
   Zap,
   Check,
-  TrendingUp
-} from 'lucide-react';
-
-// Feature Card Component
+  TrendingUp,
+} from "lucide-react";
+import { GlowingEffect } from "@/components/ui/glowing-effect";
+// Feature Card Component with Glowing Effect and Dotted Background
 interface FeatureCardProps {
   title: string;
   description: string;
   icon: React.ElementType;
   gradient: string;
-  size?: 'normal' | 'large' | 'wide';
+  gridArea: string;
   children?: React.ReactNode;
   delay?: number;
 }
 
-function FeatureCard({ 
-  title, 
-  description, 
-  icon: Icon, 
-  gradient, 
-  size = 'normal',
+function FeatureCard({
+  title,
+  description,
+  icon: Icon,
+  gradient,
+  gridArea,
   children,
-  delay = 0
+  delay = 0,
 }: FeatureCardProps) {
-  const { ref, isVisible } = useScrollAnimation<HTMLDivElement>({ threshold: 0.2 });
-
-  const sizeClasses = {
-    normal: 'md:col-span-1 aspect-square',
-    large: 'md:col-span-2 md:row-span-2',
-    wide: 'md:col-span-2',
-  };
+  const { ref, isVisible } = useScrollAnimation<HTMLLIElement>({
+    threshold: 0.2,
+  });
 
   return (
-    <div
+    <li
       ref={ref}
-      className={`relative group ${sizeClasses[size]} rounded-3xl overflow-hidden cursor-pointer hover-lift`}
+      className={`min-h-[16rem] list-none ${gridArea}`}
       style={{
         opacity: isVisible ? 1 : 0,
-        transform: isVisible ? 'translateY(0)' : 'translateY(30px)',
-        transition: `all 0.6s ease-out ${delay}s`,
+        transform: isVisible ? "translateY(0)" : "translateY(30px)",
+        transition: `all 0.6s cubic-bezier(0.16, 1, 0.3, 1) ${delay}s`,
       }}
     >
-      <div className={`absolute inset-0 ${gradient} backdrop-blur-xl`} />
-      <div className="absolute inset-0 bg-white/40 dark:bg-slate-900/40 backdrop-blur-xl" />
-      <div className="absolute inset-0 border border-slate-200/50 dark:border-slate-700/50 rounded-3xl group-hover:border-blue-500/30 dark:group-hover:border-blue-400/30 transition-colors duration-300" />
-      
-      <div className="relative h-full p-6 md:p-8 flex flex-col">
-        {/* Icon */}
-        <div className="mb-4">
-          <div className="relative inline-flex p-3 rounded-2xl bg-gradient-to-br from-white/50 to-white/20 dark:from-slate-800/50 dark:to-slate-800/20 shadow-lg group-hover:shadow-xl transition-shadow duration-300">
-            <Icon className="w-8 h-8 text-blue-600 dark:text-blue-400" />
-            <div className="absolute inset-0 bg-blue-500/20 blur-xl rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+      <div className="relative h-full rounded-xl border border-slate-200/80 dark:border-slate-700/80 p-1.5 md:rounded-2xl md:p-2 hover:border-blue-500/40 dark:hover:border-blue-400/40 transition-colors duration-500 overflow-hidden">
+        {/* Glowing Effect */}
+        <GlowingEffect
+          spread={40}
+          glow={true}
+          disabled={false}
+          proximity={60}
+          inactiveZone={0.01}
+          borderWidth={1.5}
+        />
+        <div className="relative flex h-full flex-col justify-between gap-3 overflow-hidden rounded-lg md:rounded-xl p-4 md:p-5 bg-white/60 dark:bg-slate-900/60 backdrop-blur-xl shadow-lg dark:shadow-[0px_0px_30px_0px_rgba(59,130,246,0.08)]">
+          <div className="relative flex flex-1 flex-col justify-between gap-3">
+            {/* Icon Container */}
+            <div className="relative inline-flex w-fit">
+              <div
+                className={`p-2.5 rounded-xl ${gradient} shadow-md group-hover:shadow-lg transition-all duration-500`}
+              >
+                <Icon className="w-5 h-5 text-white" />
+              </div>
+            </div>
+
+            {/* Content */}
+            <div className="space-y-2">
+              <h3 className="font-bold text-base md:text-lg text-slate-900 dark:text-white leading-tight">
+                {title}
+              </h3>
+              <p className="text-xs md:text-sm text-slate-600 dark:text-slate-400 leading-relaxed line-clamp-2">
+                {description}
+              </p>
+            </div>
+
+            {/* Animated Content */}
+            {children && <div className="mt-auto">{children}</div>}
           </div>
         </div>
-
-        {/* Content */}
-        <h3 className="text-xl md:text-2xl font-bold text-slate-800 dark:text-slate-200 mb-3">
-          {title}
-        </h3>
-        <p className="text-slate-600 dark:text-slate-400 text-sm md:text-base leading-relaxed">
-          {description}
-        </p>
-
-        {/* Custom Content */}
-        {children && (
-          <div className="mt-auto pt-4">
-            {children}
-          </div>
-        )}
-
-        {/* Hover Glow */}
-        <div className="absolute -inset-px bg-gradient-to-r from-blue-500/0 via-violet-500/0 to-teal-500/0 group-hover:from-blue-500/20 group-hover:via-violet-500/20 group-hover:to-teal-500/20 rounded-3xl opacity-0 group-hover:opacity-100 transition-opacity duration-500 blur-xl" />
       </div>
-    </div>
+    </li>
   );
 }
 
-// Animated Chat Messages
+// Animated Chat Messages (Compact)
 function ChatAnimation() {
   const messages = [
     { text: "What's the liability cap?", isUser: true },
-    { text: "The liability cap is $5M per Section 8.3", isUser: false },
-    { text: "When does this contract expire?", isUser: true },
-    { text: "December 31, 2024 - 45 days remaining", isUser: false },
+    { text: "$5M per Section 8.3", isUser: false },
   ];
 
   return (
-    <div className="mt-6 space-y-3">
+    <div className="mt-2 space-y-2">
       {messages.map((msg, i) => (
-        <div 
+        <div
           key={i}
-          className={`flex ${msg.isUser ? 'justify-end' : 'justify-start'}`}
+          className={`flex ${msg.isUser ? "justify-end" : "justify-start"}`}
           style={{
-            animation: `slide-up 0.4s ease-out forwards`,
-            animationDelay: `${i * 0.8 + 1}s`,
+            animation: `slide-up 0.3s ease-out forwards`,
+            animationDelay: `${i * 0.6 + 1}s`,
             opacity: 0,
           }}
         >
-          <div 
-            className={`max-w-[85%] px-4 py-2.5 rounded-2xl text-sm ${
-              msg.isUser 
-                ? 'bg-blue-600 text-white rounded-tr-sm' 
-                : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-tl-sm'
+          <div
+            className={`max-w-[90%] px-3 py-1.5 rounded-xl text-xs shadow-sm ${
+              msg.isUser
+                ? "bg-blue-600 text-white rounded-tr-sm"
+                : "bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-tl-sm"
             }`}
           >
             {msg.text}
           </div>
         </div>
       ))}
-      {/* Typing Indicator */}
-      <div 
-        className="flex justify-start"
-        style={{
-          animation: `fade-in 0.3s ease-out forwards`,
-          animationDelay: '4.5s',
-          opacity: 0,
-        }}
-      >
-        <div className="bg-slate-100 dark:bg-slate-800 rounded-2xl rounded-tl-sm px-4 py-3">
-          <div className="flex gap-1">
-            <span className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '0s' }} />
-            <span className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }} />
-            <span className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '0.4s' }} />
-          </div>
-        </div>
-      </div>
     </div>
   );
 }
 
-// Document Extraction Animation
+// Document Extraction Animation (Compact)
 function ExtractionAnimation() {
   const fields = [
-    { label: 'Contract Type', value: 'Service Agreement', status: 'done' },
-    { label: 'Parties', value: '3 identified', status: 'done' },
-    { label: 'Effective Date', value: 'Jan 1, 2024', status: 'done' },
-    { label: 'Term', value: '24 months', status: 'processing' },
-    { label: 'Value', value: 'Analyzing...', status: 'pending' },
+    { label: "Contract Type", value: "Service", status: "done" },
+    { label: "Parties", value: "3 found", status: "done" },
+    { label: "Term", value: "24 mo", status: "processing" },
   ];
 
   return (
-    <div className="mt-6 space-y-2">
+    <div className="mt-2 space-y-1.5">
       {fields.map((field, i) => (
-        <div 
+        <div
           key={i}
-          className="flex items-center justify-between p-3 rounded-xl bg-white/50 dark:bg-slate-800/50"
+          className="flex items-center justify-between p-2 rounded-lg bg-white/50 dark:bg-slate-800/50 backdrop-blur-sm"
           style={{
-            animation: `slide-up 0.4s ease-out forwards`,
-            animationDelay: `${i * 0.3 + 0.5}s`,
+            animation: `slide-up 0.3s ease-out forwards`,
+            animationDelay: `${i * 0.2 + 0.5}s`,
             opacity: 0,
           }}
         >
-          <span className="text-xs text-slate-500 dark:text-slate-400">{field.label}</span>
-          <div className="flex items-center gap-2">
-            <span className="text-sm font-medium text-slate-700 dark:text-slate-300">{field.value}</span>
-            {field.status === 'done' && <Check className="w-4 h-4 text-emerald-500" />}
-            {field.status === 'processing' && (
-              <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+          <span className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">
+            {field.label}
+          </span>
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+              {field.value}
+            </span>
+            {field.status === "done" && (
+              <Check className="w-3 h-3 text-emerald-500" />
             )}
-            {field.status === 'pending' && (
-              <div className="w-4 h-4 rounded-full bg-slate-300 dark:bg-slate-600" />
+            {field.status === "processing" && (
+              <div className="w-3 h-3 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
             )}
           </div>
         </div>
@@ -179,26 +162,26 @@ function ExtractionAnimation() {
   );
 }
 
-// Blockchain Animation
+// Blockchain Animation (Compact)
 function BlockchainAnimation() {
   return (
-    <div className="mt-6 relative h-32">
+    <div className="mt-2 relative h-24">
       {/* Nodes */}
-      {[0, 1, 2, 3].map((i) => (
+      {[0, 1, 2].map((i) => (
         <div
           key={i}
-          className="absolute w-10 h-10 rounded-full bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center shadow-lg"
+          className="absolute w-8 h-8 rounded-full bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center shadow-lg"
           style={{
-            left: `${i * 25}%`,
-            top: i % 2 === 0 ? '20%' : '50%',
+            left: `${i * 33}%`,
+            top: i % 2 === 0 ? "20%" : "50%",
             animation: `float 3s ease-in-out infinite`,
             animationDelay: `${i * 0.3}s`,
           }}
         >
-          <Link className="w-5 h-5 text-white" />
+          <Link className="w-4 h-4 text-white" />
         </div>
       ))}
-      
+
       {/* Connection Lines */}
       <svg className="absolute inset-0 w-full h-full" style={{ zIndex: -1 }}>
         <defs>
@@ -207,32 +190,31 @@ function BlockchainAnimation() {
             <stop offset="100%" stopColor="#a855f7" stopOpacity="0.5" />
           </linearGradient>
         </defs>
-        {[0, 1, 2].map((i) => (
+        {[0, 1].map((i) => (
           <line
             key={i}
-            x1={`${i * 25 + 12}%`}
-            y1={i % 2 === 0 ? '35%' : '65%'}
-            x2={`${(i + 1) * 25 + 12}%`}
-            y2={i % 2 === 0 ? '65%' : '35%'}
+            x1={`${i * 33 + 12}%`}
+            y1={i % 2 === 0 ? "35%" : "65%"}
+            x2={`${(i + 1) * 33 + 12}%`}
+            y2={i % 2 === 0 ? "65%" : "35%"}
             stroke="url(#lineGradient)"
             strokeWidth="2"
-            strokeDasharray="5,5"
+            strokeDasharray="4,4"
             className="animate-pulse"
-            style={{ animationDelay: `${i * 0.2}s` }}
           />
         ))}
       </svg>
 
       {/* Transaction Hash */}
-      <div 
-        className="absolute bottom-0 left-1/2 -translate-x-1/2 px-3 py-1.5 rounded-full bg-violet-500/10 dark:bg-violet-500/20"
+      <div
+        className="absolute bottom-0 left-1/2 -translate-x-1/2 px-2.5 py-1 rounded-full bg-violet-500/15 dark:bg-violet-500/25 backdrop-blur-sm"
         style={{
-          animation: `slide-up 0.5s ease-out forwards`,
-          animationDelay: '1.5s',
+          animation: `slide-up 0.4s ease-out forwards`,
+          animationDelay: "1.2s",
           opacity: 0,
         }}
       >
-        <span className="text-xs font-mono text-violet-600 dark:text-violet-400">
+        <span className="text-[10px] font-mono font-semibold text-violet-600 dark:text-violet-400">
           0x7f8a...9b2c ✓
         </span>
       </div>
@@ -240,83 +222,98 @@ function BlockchainAnimation() {
   );
 }
 
-// Dashboard Mini Preview
+// Dashboard Mini Preview (Compact)
 function DashboardPreview() {
   return (
-    <div className="mt-6 grid grid-cols-3 gap-3">
+    <div className="mt-2 grid grid-cols-3 gap-2">
       {/* Mini Chart */}
-      <div className="col-span-2 glass rounded-xl p-3">
-        <div className="flex items-end gap-1 h-16">
-          {[30, 50, 40, 70, 55, 80, 65, 90, 75, 85].map((h, i) => (
-            <div 
+      <div className="col-span-2 bg-white/50 dark:bg-slate-800/50 backdrop-blur-sm rounded-lg p-2 shadow-sm">
+        <div className="flex items-end gap-0.5 h-14">
+          {[30, 50, 40, 70, 55, 80, 65].map((h, i) => (
+            <div
               key={i}
-              className="flex-1 bg-gradient-to-t from-blue-500 to-violet-500 rounded-t-sm"
-              style={{ height: `${h}%` }}
+              className="flex-1 bg-gradient-to-t from-blue-500 to-blue-400 rounded-t-sm transition-all duration-300 hover:opacity-80"
+              style={{
+                height: `${h}%`,
+                animation: `slide-up 0.3s ease-out forwards`,
+                animationDelay: `${i * 0.08 + 0.4}s`,
+                opacity: 0,
+              }}
             />
           ))}
         </div>
       </div>
-      
+
       {/* Stats */}
-      <div className="space-y-2">
-        <div className="glass rounded-lg p-2 text-center">
-          <TrendingUp className="w-4 h-4 mx-auto text-emerald-500 mb-1" />
-          <span className="text-xs font-bold text-slate-700 dark:text-slate-300">+24%</span>
+      <div className="space-y-1.5">
+        <div className="bg-white/50 dark:bg-slate-800/50 backdrop-blur-sm rounded-lg p-2 text-center shadow-sm">
+          <TrendingUp className="w-4 h-4 mx-auto text-emerald-500 mb-0.5" />
+          <span className="text-xs font-bold text-slate-700 dark:text-slate-300">
+            +24%
+          </span>
         </div>
-        <div className="glass rounded-lg p-2 text-center">
-          <Zap className="w-4 h-4 mx-auto text-amber-500 mb-1" />
-          <span className="text-xs font-bold text-slate-700 dark:text-slate-300">98.9%</span>
+        <div className="bg-white/50 dark:bg-slate-800/50 backdrop-blur-sm rounded-lg p-2 text-center shadow-sm">
+          <Zap className="w-4 h-4 mx-auto text-amber-500 mb-0.5" />
+          <span className="text-xs font-bold text-slate-700 dark:text-slate-300">
+            98.9%
+          </span>
         </div>
       </div>
     </div>
   );
 }
 
-// Notification Animation
+// Notification Animation (Compact)
 function NotificationAnimation() {
   const notifications = [
-    { icon: Bell, text: 'Contract renewal in 7 days', color: 'text-amber-500' },
-    { icon: Check, text: 'Document verified', color: 'text-emerald-500' },
-    { icon: Sparkles, text: 'AI analysis complete', color: 'text-blue-500' },
+    { icon: Bell, text: "Renewal in 7 days", color: "text-amber-500" },
+    { icon: Check, text: "Doc verified", color: "text-emerald-500" },
   ];
 
   return (
-    <div className="mt-6 space-y-2">
+    <div className="mt-2 space-y-1.5">
       {notifications.map((notif, i) => (
         <div
           key={i}
-          className="flex items-center gap-3 p-3 rounded-xl bg-white/50 dark:bg-slate-800/50"
+          className="flex items-center gap-2 p-2 rounded-lg bg-white/50 dark:bg-slate-800/50 backdrop-blur-sm"
           style={{
-            animation: `slide-up 0.4s ease-out forwards`,
-            animationDelay: `${i * 0.5 + 0.8}s`,
+            animation: `slide-up 0.3s ease-out forwards`,
+            animationDelay: `${i * 0.4 + 0.6}s`,
             opacity: 0,
           }}
         >
-          <notif.icon className={`w-5 h-5 ${notif.color}`} />
-          <span className="text-sm text-slate-700 dark:text-slate-300">{notif.text}</span>
+          <notif.icon className={`w-4 h-4 flex-shrink-0 ${notif.color}`} />
+          <span className="text-xs text-slate-700 dark:text-slate-300 font-medium truncate">
+            {notif.text}
+          </span>
         </div>
       ))}
     </div>
   );
 }
 
-// Security Animation
+// Security Animation (Compact)
 function SecurityAnimation() {
   return (
-    <div className="mt-6 flex flex-col items-center">
+    <div className="mt-2 flex flex-col items-center">
       <div className="relative">
-        <div className="w-20 h-20 rounded-full bg-gradient-to-br from-emerald-500 to-green-600 flex items-center justify-center shadow-lg animate-pulse-glow">
-          <Lock className="w-10 h-10 text-white" />
+        <div className="w-16 h-16 rounded-full bg-gradient-to-br from-emerald-500 to-green-600 flex items-center justify-center shadow-xl animate-pulse-glow">
+          <Lock className="w-8 h-8 text-white" />
         </div>
-        <div className="absolute -top-1 -right-1 w-6 h-6 rounded-full bg-emerald-500 flex items-center justify-center">
-          <Check className="w-4 h-4 text-white" />
+        <div className="absolute -top-0.5 -right-0.5 w-5 h-5 rounded-full bg-emerald-500 flex items-center justify-center shadow-md">
+          <Check className="w-3 h-3 text-white" />
         </div>
       </div>
-      <div className="mt-4 flex gap-2 flex-wrap justify-center">
-        {['AES-256', 'GDPR', 'ISO 27001'].map((badge, i) => (
-          <span 
+      <div className="mt-3 flex gap-1.5 flex-wrap justify-center">
+        {["AES-256", "GDPR", "ISO"].map((badge, i) => (
+          <span
             key={i}
-            className="px-3 py-1 rounded-full text-xs font-medium bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+            className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-500/15 dark:bg-emerald-500/25 text-emerald-600 dark:text-emerald-400"
+            style={{
+              animation: `slide-up 0.3s ease-out forwards`,
+              animationDelay: `${i * 0.15 + 0.4}s`,
+              opacity: 0,
+            }}
           >
             {badge}
           </span>
@@ -327,88 +324,104 @@ function SecurityAnimation() {
 }
 
 export function Features() {
-  const { ref: headerRef, isVisible: headerVisible } = useScrollAnimation<HTMLDivElement>();
+  const { ref: headerRef, isVisible: headerVisible } =
+    useScrollAnimation<HTMLDivElement>();
 
   const features = [
     {
-      title: 'AI-Powered Conversational Assistant',
-      description: 'Ask any question about your contracts. Our AI understands legal context and responds in seconds with precise answers.',
+      title: "AI-Powered Assistant",
+      description:
+        "Ask questions about your contracts and get instant, precise answers with legal context.",
       icon: MessageSquare,
-      gradient: 'card-gradient-blue',
-      size: 'large' as const,
+      gradient: "bg-gradient-to-br from-blue-500 to-blue-600",
+      gridArea: "md:[grid-area:1/1/2/3]",
       content: <ChatAnimation />,
     },
     {
-      title: 'Intelligent Document Extraction',
-      description: 'Advanced OCR + AI automatically extracts and structures all information from your PDF documents.',
+      title: "Document Extraction",
+      description:
+        "Advanced OCR + AI extracts and structures information from PDFs automatically.",
       icon: Brain,
-      gradient: 'card-gradient-teal',
+      gradient: "bg-gradient-to-br from-teal-500 to-teal-600",
+      gridArea: "md:[grid-area:1/3/2/4]",
       content: <ExtractionAnimation />,
     },
     {
-      title: 'Blockchain Proof of Submission',
-      description: 'Immutable timestamping on Polygon. Cryptographic proof that\'s legally valid and instantly verifiable.',
+      title: "Blockchain Proof",
+      description:
+        "Immutable timestamping on Polygon with cryptographic verification.",
       icon: Shield,
-      gradient: 'card-gradient-violet',
+      gradient: "bg-gradient-to-br from-violet-500 to-purple-600",
+      gridArea: "md:[grid-area:2/3/3/4]",
       content: <BlockchainAnimation />,
     },
     {
-      title: 'Comprehensive Dashboard & Analytics',
-      description: 'Visualize all contracts, renewal alerts, and detailed analytics in one beautiful interface.',
+      title: "Analytics Dashboard",
+      description:
+        "Visualize contracts, renewals, and analytics in one interface.",
       icon: BarChart3,
-      gradient: 'from-blue-500/10 via-violet-500/10 to-teal-500/10',
-      size: 'wide' as const,
+      gradient: "bg-gradient-to-br from-indigo-500 to-indigo-600",
+      gridArea: "md:[grid-area:2/1/3/3]",
       content: <DashboardPreview />,
     },
     {
-      title: 'Smart Notifications',
-      description: 'Automated alerts for renewals, deadlines, and important contract events. Never miss a date.',
+      title: "Smart Alerts",
+      description:
+        "Automated notifications for renewals, deadlines, and key events.",
       icon: Bell,
-      gradient: 'card-gradient-amber',
+      gradient: "bg-gradient-to-br from-amber-500 to-orange-600",
+      gridArea: "md:[grid-area:3/3/4/4]",
       content: <NotificationAnimation />,
     },
     {
-      title: 'Enterprise Security',
-      description: 'AES-256 encryption, GDPR compliant, secure hosting. Your data is protected at every level.',
+      title: "Enterprise Security",
+      description: "AES-256 encryption, GDPR compliant with secure hosting.",
       icon: Lock,
-      gradient: 'card-gradient-emerald',
+      gradient: "bg-gradient-to-br from-emerald-500 to-green-600",
+      gridArea: "md:[grid-area:3/1/4/3]",
       content: <SecurityAnimation />,
     },
   ];
 
   return (
-    <section id="features" className="relative py-24 px-4 sm:px-6 lg:px-8 overflow-hidden">
+    <section
+      id="features"
+      className="relative pt-16 pb-0 px-4 sm:px-6 lg:px-8 overflow-hidden"
+    >
       {/* Background */}
-      <div className="absolute inset-0 gradient-bg-mesh opacity-50" />
+      <div className="absolute inset-0 gradient-bg-mesh opacity-30" />
+      <div className="absolute inset-0 bg-gradient-to-b from-transparent via-blue-50/50 to-transparent dark:via-slate-900/50" />
 
-      <div className="relative max-w-7xl mx-auto">
+      <div className="relative max-w-6xl mx-auto pb-6">
         {/* Section Header */}
-        <div 
+        <div
           ref={headerRef}
-          className="text-center mb-16"
+          className="text-center mb-12"
           style={{
             opacity: headerVisible ? 1 : 0,
-            transform: headerVisible ? 'translateY(0)' : 'translateY(30px)',
-            transition: 'all 0.6s ease-out',
+            transform: headerVisible ? "translateY(0)" : "translateY(20px)",
+            transition: "all 0.6s cubic-bezier(0.16, 1, 0.3, 1)",
           }}
         >
-          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full glass mb-6">
+          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full glass mb-6 shadow-md">
             <Sparkles className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-            <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Features</span>
+            <span className="text-xs font-bold text-slate-700 dark:text-slate-300">
+              Features
+            </span>
           </div>
-          
-          <h2 className="text-4xl md:text-5xl font-bold text-slate-900 dark:text-white mb-4">
-            Everything You Need to{' '}
+
+          <h2 className="text-3xl md:text-5xl font-black text-slate-900 dark:text-white mb-4 leading-tight">
+            Everything You Need to{" "}
             <span className="gradient-text">Manage Contracts</span>
           </h2>
-          
-          <p className="text-xl text-slate-600 dark:text-slate-400 max-w-2xl mx-auto">
-            Powerful AI combined with blockchain security. Built for professionals.
+
+          <p className="text-lg md:text-xl text-slate-600 dark:text-slate-400 max-w-2xl mx-auto leading-relaxed">
+            Powerful AI combined with blockchain security.
           </p>
         </div>
 
-        {/* Bento Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        {/* Bento Grid - Compact */}
+        <ul className="grid grid-cols-1 grid-rows-none gap-3 md:grid-cols-3 md:grid-rows-3 lg:gap-4">
           {features.map((feature, index) => (
             <FeatureCard
               key={feature.title}
@@ -416,13 +429,13 @@ export function Features() {
               description={feature.description}
               icon={feature.icon}
               gradient={feature.gradient}
-              size={feature.size}
-              delay={index * 0.1}
+              gridArea={feature.gridArea}
+              delay={index * 0.08}
             >
               {feature.content}
             </FeatureCard>
           ))}
-        </div>
+        </ul>
       </div>
     </section>
   );

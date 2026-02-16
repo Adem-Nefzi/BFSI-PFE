@@ -7,6 +7,7 @@ import { Features } from "@/components/views/Home/Features";
 import { HowItWorks } from "@/components/views/Home/HowItWorks";
 import { Stats } from "@/components/views/Home/Stats";
 import { Footer } from "@/components/views/Home/Footer";
+import { Button } from "@/components/ui/button";
 import { Sparkles } from "lucide-react";
 
 function LoadingScreen({ onComplete }: { onComplete: () => void }) {
@@ -37,9 +38,7 @@ function LoadingScreen({ onComplete }: { onComplete: () => void }) {
         />
       </div>
 
-      <h1 className="text-2xl font-bold gradient-text mb-8">
-        Smart-Admin Copilot
-      </h1>
+      <h1 className="text-2xl font-bold gradient-text mb-8">LexiChain</h1>
 
       <div className="w-64 h-1 bg-slate-800 rounded-full overflow-hidden">
         <div
@@ -98,7 +97,7 @@ function BackToTop() {
   };
 
   return (
-    <button
+    <Button
       onClick={scrollToTop}
       className={`fixed bottom-8 right-8 z-50 w-12 h-12 rounded-full bg-gradient-to-r from-blue-600 to-violet-600 text-white shadow-lg hover:shadow-xl hover:scale-110 transition-all duration-300 flex items-center justify-center ${
         isVisible
@@ -120,7 +119,7 @@ function BackToTop() {
           d="M5 10l7-7m0 0l7 7m-7-7v18"
         />
       </svg>
-    </button>
+    </Button>
   );
 }
 

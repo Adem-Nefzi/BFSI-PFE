@@ -4,8 +4,9 @@
 
 @layer base {
   :root {
+    color-scheme: light;
     /* Light Mode - Smart-Admin Copilot Palette */
-    --background: 0 0% 100%;
+    --background: 210 40% 98%;
     --foreground: 222 47% 11%;
     --card: 210 40% 98%;
     --card-foreground: 222 47% 11%;
@@ -41,6 +42,7 @@
   }
 
   .dark {
+    color-scheme: dark;
     /* Dark Mode - Smart-Admin Copilot Palette */
     --background: 222 47% 5%;
     --foreground: 210 40% 98%;
