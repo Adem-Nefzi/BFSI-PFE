@@ -65,7 +65,7 @@ export function Sidebar() {
     <TooltipProvider>
       <aside
         className={cn(
-          "fixed left-0 top-16 bottom-0 z-30 flex flex-col border-r border-border bg-white dark:bg-slate-900 transition-all duration-300 lg:static lg:top-0",
+          "fixed left-0 top-16 bottom-0 z-30 flex flex-col border-r border-border bg-white dark:bg-slate-900 transition-all duration-300 lg:static lg:top-0 shadow-lg lg:shadow-none",
           collapsed ? "w-20" : "w-64"
         )}
       >
@@ -82,12 +82,15 @@ export function Sidebar() {
                     <Button
                       variant={isActive ? "default" : "ghost"}
                       className={cn(
-                        "w-full justify-start gap-3 transition-all duration-200",
+                        "w-full justify-start gap-3 transition-all duration-200 relative group",
                         isActive
-                          ? "bg-blue-600 hover:bg-blue-700 text-white"
-                          : "hover:bg-slate-100 dark:hover:bg-slate-800"
+                          ? "bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white shadow-lg"
+                          : "hover:bg-slate-100 dark:hover:bg-slate-800 text-foreground"
                       )}
                     >
+                      {isActive && (
+                        <div className="absolute left-0 top-0 bottom-0 w-1 bg-white rounded-r-full" />
+                      )}
                       <Icon className="w-5 h-5 flex-shrink-0" />
                       {!collapsed && (
                         <span className="text-sm font-medium">{item.label}</span>
@@ -124,11 +127,11 @@ export function Sidebar() {
 
           <Button
             className={cn(
-              "w-full justify-start gap-2 bg-gradient-to-r from-blue-600 to-teal-600 hover:from-blue-700 hover:to-teal-700 text-white font-medium transition-all duration-200",
+              "w-full justify-start gap-2 bg-gradient-to-r from-blue-600 to-teal-600 hover:from-blue-700 hover:to-teal-700 text-white font-medium transition-all duration-200 shadow-lg hover:shadow-xl hover:scale-105",
               collapsed && "p-0 h-10"
             )}
           >
-            <Zap className="w-4 h-4 flex-shrink-0" />
+            <Zap className="w-4 h-4 flex-shrink-0 animate-pulse" />
             {!collapsed && <span className="text-sm">Upgrade Pro</span>}
           </Button>
         </div>

@@ -59,11 +59,11 @@ export function TopNav({ onMobileMenuClick }: TopNavProps) {
 
         {/* Center Search */}
         <div className="hidden md:flex flex-1 max-w-xl mx-8">
-          <div className="relative w-full">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+          <div className="relative w-full group">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors" />
             <Input
               placeholder="Search contracts... (⌘K)"
-              className="pl-10 bg-white dark:bg-slate-800/50 border-border"
+              className="pl-10 bg-slate-100/50 dark:bg-slate-800/50 border-border hover:border-blue-500/50 focus:border-blue-500 focus:ring-blue-500/20 transition-all duration-200"
             />
           </div>
         </div>
@@ -74,10 +74,10 @@ export function TopNav({ onMobileMenuClick }: TopNavProps) {
           <Button
             variant="ghost"
             size="icon"
-            className="relative"
+            className="relative hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
           >
             <Bell className="w-5 h-5" />
-            <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full animate-pulse" />
+            <span className="absolute top-2 right-2 w-2.5 h-2.5 bg-red-500 rounded-full animate-pulse shadow-lg shadow-red-500/50" />
           </Button>
 
           {/* Theme Toggle */}
@@ -85,11 +85,12 @@ export function TopNav({ onMobileMenuClick }: TopNavProps) {
             variant="ghost"
             size="icon"
             onClick={() => setTheme(theme === "light" ? "dark" : "light")}
+            className="hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors hover-scale"
           >
             {theme === "light" ? (
-              <Moon className="w-5 h-5" />
+              <Moon className="w-5 h-5 transition-transform" />
             ) : (
-              <Sun className="w-5 h-5" />
+              <Sun className="w-5 h-5 transition-transform" />
             )}
           </Button>
 
