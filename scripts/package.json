@@ -1,0 +1,6 @@
+{
+  "name": "bfsi-scripts",
+  "scripts": {
+    "sync-users": "tsx scripts/sync-users.ts"
+  }
+}

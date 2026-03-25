@@ -440,7 +440,7 @@ export function HowItWorks() {
       number: "02",
       title: "AI Analysis",
       description:
-        "GPT-4 Turbo extracts and analyzes every clause, term, and detail automatically.",
+        "AI extracts and analyzes every clause, term, and detail automatically.",
       icon: Cpu,
       gradient: "bg-gradient-to-br from-violet-500 to-purple-600",
       glowColor: "rgba(139, 92, 246, 0.5)",

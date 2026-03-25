@@ -8,13 +8,15 @@ import {
   Lock,
   Check,
   Zap,
-  Link,
+  Link2,
   FileText,
   MessageSquare,
   Shield,
   TrendingUp,
   Bell,
 } from "lucide-react";
+import Link from "next/link";
+import { SignedIn, SignedOut } from "@clerk/nextjs";
 
 // Ripple Effect Component
 function BackgroundRipple() {
@@ -407,7 +409,7 @@ export function Hero() {
     { icon: Lock, label: "Bank-Level Security" },
     { icon: Check, label: "GDPR Certified" },
     { icon: Zap, label: "Real-Time AI" },
-    { icon: Link, label: "Blockchain Verified" },
+    { icon: Link2, label: "Blockchain Verified" },
   ];
 
   return (
@@ -544,8 +546,10 @@ export function Hero() {
           }`}
         >
           {/* Primary CTA */}
-          <Button
-            className="
+          <SignedOut>
+            <Button
+              asChild
+              className="
   group relative px-12 py-5 
   text-lg md:text-xl font-semibold 
   text-white rounded-2xl
@@ -560,10 +564,11 @@ export function Hero() {
   hover:shadow-xl hover:shadow-blue-500/40
   active:scale-[0.98]
 "
-          >
-            {/* Glow background layer */}
-            <div
-              className="
+            >
+              <Link href="/sign-in">
+                {/* Glow background layer */}
+                <div
+                  className="
     absolute inset-0 
     opacity-0 group-hover:opacity-100
     transition-opacity duration-500
@@ -573,31 +578,89 @@ export function Hero() {
     to-teal-400/20
     blur-xl
   "
-            />
+                />
 
-            {/* Animated gradient shift layer */}
-            <div
-              className="
+                {/* Animated gradient shift layer */}
+                <div
+                  className="
     absolute inset-0 
     bg-[length:200%_200%]
     animate-gradient-shift
     opacity-70
     mix-blend-overlay
   "
-            />
+                />
 
-            <span className="relative z-10 flex items-center gap-3">
-              Get Started
-              <Rocket
-                className="
+                <span className="relative z-10 flex items-center gap-3">
+                  Get Started
+                  <Rocket
+                    className="
       w-6 h-6 
       transition-transform duration-300 
       group-hover:translate-x-1 
       group-hover:-translate-y-1
     "
-              />
-            </span>
-          </Button>
+                  />
+                </span>
+              </Link>
+            </Button>
+          </SignedOut>
+
+          <SignedIn>
+            <Button
+              asChild
+              className="
+  group relative px-12 py-5 
+  text-lg md:text-xl font-semibold 
+  text-white rounded-2xl
+  overflow-hidden
+  bg-gradient-to-r 
+  from-[hsl(var(--primary))] 
+  via-[hsl(var(--accent))] 
+  to-[hsl(var(--secondary))]
+  shadow-lg shadow-blue-500/20
+  transition-all duration-300 ease-out
+  hover:scale-[1.04]
+  hover:shadow-xl hover:shadow-blue-500/40
+  active:scale-[0.98]
+"
+            >
+              <Link href="/dashboard">
+                <div
+                  className="
+    absolute inset-0 
+    opacity-0 group-hover:opacity-100
+    transition-opacity duration-500
+    bg-gradient-to-r 
+    from-blue-400/20 
+    via-purple-400/20 
+    to-teal-400/20
+    blur-xl
+  "
+                />
+                <div
+                  className="
+    absolute inset-0 
+    bg-[length:200%_200%]
+    animate-gradient-shift
+    opacity-70
+    mix-blend-overlay
+  "
+                />
+                <span className="relative z-10 flex items-center gap-3">
+                  Go To Dashboard
+                  <Rocket
+                    className="
+      w-6 h-6 
+      transition-transform duration-300 
+      group-hover:translate-x-1 
+      group-hover:-translate-y-1
+    "
+                  />
+                </span>
+              </Link>
+            </Button>
+          </SignedIn>
         </div>
 
         {/* Trust Indicators */}

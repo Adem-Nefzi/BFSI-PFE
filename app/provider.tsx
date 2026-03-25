@@ -1,6 +1,9 @@
+// src/components/providers.tsx
 "use client";
+
 import { ThemeProvider } from "next-themes";
 import { ReactNode } from "react";
+import { ClerkThemeProvider } from "./clerk-provider";
 
 export function Providers({ children }: { children: ReactNode }) {
   return (
@@ -10,7 +13,7 @@ export function Providers({ children }: { children: ReactNode }) {
       enableSystem
       disableTransitionOnChange
     >
-      {children}
+      <ClerkThemeProvider>{children}</ClerkThemeProvider>
     </ThemeProvider>
   );
 }
