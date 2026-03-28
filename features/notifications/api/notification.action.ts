@@ -80,7 +80,10 @@ export async function getNotifications(limit: number = 10) {
       };
     }
 
-    // Step 3: Fetch unread notifications
+    // Step 3: Enforce cleanup policy for seen non-deadline notifications
+    await NotificationService.cleanupReadNonDeadline(user.id);
+
+    // Step 4: Fetch unread notifications
     const result = await NotificationService.getUnread(user.id, limit);
 
     return result;
@@ -127,6 +130,8 @@ export async function getAllNotifications(limit: number = 50) {
         error: "User not found",
       };
     }
+
+    await NotificationService.cleanupReadNonDeadline(user.id);
 
     const result = await NotificationService.getAll(user.id, limit);
 
@@ -179,6 +184,8 @@ export async function getUnreadNotificationCount() {
         error: "User not found",
       };
     }
+
+    await NotificationService.cleanupReadNonDeadline(user.id);
 
     const result = await NotificationService.getUnreadCount(user.id);
 
@@ -294,6 +301,47 @@ export async function markAllNotificationsAsRead() {
     }
 
     console.error("Mark all notifications as read error:", error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Unknown error",
+    };
+  }
+}
+
+/**
+ * Force cleanup of seen non-deadline notifications for current user.
+ * Useful as a maintenance endpoint from UI hooks.
+ */
+export async function cleanupSeenNotifications() {
+  try {
+    const { userId: clerkId } = await auth();
+
+    if (!clerkId) {
+      return {
+        success: false,
+        error: "Unauthorized",
+      };
+    }
+
+    const user = await ContractService.getUserByClerkId(clerkId);
+
+    if (!user) {
+      return {
+        success: false,
+        error: "User not found",
+      };
+    }
+
+    return await NotificationService.cleanupReadNonDeadline(user.id);
+  } catch (error: unknown) {
+    if (isNotificationTableMissingError(error)) {
+      return {
+        success: true,
+        data: { count: 0 },
+      };
+    }
+
+    console.error("Cleanup seen notifications error:", error);
     return {
       success: false,
       error: error instanceof Error ? error.message : "Unknown error",

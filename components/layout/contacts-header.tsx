@@ -8,7 +8,7 @@ import { BackgroundBeams } from "@/components/ui/background-beams";
 export function ContactsHeader() {
   return (
     <div className="border-b border-border/50 bg-background/80 backdrop-blur-sm">
-      <BackgroundBeams className="opacity-70" />
+      <BackgroundBeams className="opacity-80" />
       <div className="max-w-7xl mx-auto px-6 py-8 space-y-6">
         <Link
           href="/dashboard"

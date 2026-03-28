@@ -9,7 +9,7 @@ import { SignOutButton, UserButton } from "@clerk/nextjs";
 import { motion } from "motion/react";
 import Image from "next/image";
 import { ModeToggle } from "@/components/ui/mode-toggle";
-import NotificationBar from "./notification-bar";
+import NotificationBar from "@/features/notifications/components/notification-bar";
 
 interface NavItem {
   href: string;

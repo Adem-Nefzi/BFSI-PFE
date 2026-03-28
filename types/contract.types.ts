@@ -38,6 +38,16 @@ export interface Contract {
     exclusions?: string[];
     franchise?: string;
     importantDates?: string[];
+    explainability?: Array<{
+      field: string;
+      why: string;
+      sourceSnippet: string;
+      sourceHints?: {
+        page?: string | null;
+        section?: string | null;
+        confidence?: number | null;
+      };
+    }>;
   } | null;
 
   documentHash: string | null;
@@ -79,5 +89,15 @@ export interface AIAnalysisResult {
     exclusions?: string[];
     franchise?: string;
     importantDates?: string[];
+    explainability?: Array<{
+      field: string;
+      why: string;
+      sourceSnippet: string;
+      sourceHints?: {
+        page?: string | null;
+        section?: string | null;
+        confidence?: number | null;
+      };
+    }>;
   };
 }

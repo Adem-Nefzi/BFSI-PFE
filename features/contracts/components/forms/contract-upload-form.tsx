@@ -3,7 +3,7 @@
 import { UploadDropzone } from "@uploadthing/react";
 import { AlertCircle, Sparkles, Wand2, ShieldCheck } from "lucide-react";
 import { Card } from "@/components/ui/card";
-import { saveContract } from "@/lib/actions/contract.action";
+import { saveContract } from "@/features/contracts/api/contract.action";
 import { toast } from "sonner";
 import type { OurFileRouter } from "@/lib/upload";
 import { useRouter } from "next/navigation";

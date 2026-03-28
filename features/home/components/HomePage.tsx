@@ -1,14 +1,17 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Navbar } from "@/components/views/Home/Navbar";
-import { Hero } from "@/components/views/Home/Hero";
-import { Features } from "@/components/views/Home/Features";
-import { HowItWorks } from "@/components/views/Home/HowItWorks";
-import { Stats } from "@/components/views/Home/Stats";
-import { Footer } from "@/components/views/Home/Footer";
+import { Navbar } from "@/features/home/components/Navbar";
+import { Hero } from "@/features/home/components/Hero";
+import dynamic from "next/dynamic";
 import { Button } from "@/components/ui/button";
 import { Sparkles } from "lucide-react";
+
+// Dynamically load below-the-fold components to improve initial response time and rendering speed
+const Features = dynamic(() => import("@/features/home/components/Features").then(mod => mod.Features), { ssr: true });
+const HowItWorks = dynamic(() => import("@/features/home/components/HowItWorks").then(mod => mod.HowItWorks), { ssr: true });
+const Stats = dynamic(() => import("@/features/home/components/Stats").then(mod => mod.Stats), { ssr: true });
+const Footer = dynamic(() => import("@/features/home/components/Footer").then(mod => mod.Footer), { ssr: true });
 
 function LoadingScreen({ onComplete }: { onComplete: () => void }) {
   const [progress, setProgress] = useState(0);
@@ -130,12 +133,9 @@ export function HomePage() {
     setIsLoading(false);
   };
 
-  if (isLoading) {
-    return <LoadingScreen onComplete={handleLoadingComplete} />;
-  }
-
   return (
     <div className="relative min-h-screen bg-background text-foreground overflow-x-hidden">
+      {isLoading && <LoadingScreen onComplete={handleLoadingComplete} />}
       <ScrollProgressBar />
 
       <Navbar />

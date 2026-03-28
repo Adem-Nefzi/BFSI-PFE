@@ -1,9 +1,21 @@
 // src/lib/services/ai.service.ts
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { prisma } from "@/lib/db/prisma";
+import {
+  AnalyzeOptions,
+  ContractPrecheckResult,
+  NormalizedAnalysis,
+} from "@/lib/services/ai/analysis.types";
+import {
+  buildAnalysisPrompt,
+  buildPrevalidationPrompt,
+} from "@/lib/services/ai/analysis.prompt";
+import { parseJsonResponse as parseAiJsonResponse } from "@/lib/services/ai/analysis.parser";
+import { normalizeAnalysis as normalizeAiAnalysis } from "@/lib/services/ai/analysis.normalizer";
 
 // Read API key from environment once at module load.
-const API_KEY = process.env.AI_API_KEY;
+const API_KEY =
+  process.env.AI_API_KEY || process.env.AI_API_KEY2 || process.env.AI_API_KEY3;
 
 if (!API_KEY) {
   console.error("❌ AI_API_KEY is missing from environment variables");
@@ -14,45 +26,14 @@ if (!API_KEY) {
 // Initialize Gemini
 const genAI = new GoogleGenerativeAI(API_KEY);
 
-// Runtime options used by analysis.
-type AnalyzeOptions = {
-  userId?: string;
-  fileName?: string;
-  maxRetries?: number;
-};
+const PRIMARY_ANALYSIS_MODEL =
+  process.env.AI_MODEL_PRIMARY || "gemini-2.5-flash";
+const FALLBACK_ANALYSIS_MODEL =
+  process.env.AI_MODEL_FALLBACK || "gemini-2.0-flash";
 
-// Canonical shape returned by this service after normalization and validation.
-type NormalizedAnalysis = {
-  title: string;
-  type:
-    | "INSURANCE_AUTO"
-    | "INSURANCE_HOME"
-    | "INSURANCE_HEALTH"
-    | "INSURANCE_LIFE"
-    | "LOAN"
-    | "CREDIT_CARD"
-    | "INVESTMENT"
-    | "OTHER";
-  provider: string | null;
-  policyNumber: string | null;
-  startDate: string | null;
-  endDate: string | null;
-  premium: number | null;
-  summary: string;
-  keyPoints: {
-    guarantees: string[];
-    exclusions: string[];
-    franchise: string | null;
-    importantDates: string[];
-  };
-  extractedText: string;
-};
-
-type ContractPrecheckResult = {
-  isValidContract: boolean;
-  confidence: number;
-  reason: string | null;
-};
+const ANALYSIS_MODELS = Array.from(
+  new Set([PRIMARY_ANALYSIS_MODEL, FALLBACK_ANALYSIS_MODEL]),
+);
 
 export class AIService {
   /**
@@ -127,21 +108,9 @@ export class AIService {
         );
       }
 
-      // Step 3: Configure model for deterministic, JSON-centric extraction.
-      const model = genAI.getGenerativeModel({
-        model: "gemini-2.5-flash",
-        generationConfig: {
-          temperature: 0.1, // Low for consistency
-          topP: 0.95,
-          topK: 40,
-          maxOutputTokens: 8192,
-          responseMimeType: "application/json",
-        },
-      });
-
       // Step 4: Build adaptive extraction context from previously analyzed contracts.
       const adaptiveContext = await this.buildAdaptiveContext(options?.userId);
-      const basePrompt = this.buildPrompt({
+      const basePrompt = buildAnalysisPrompt({
         adaptiveContext,
         fileName: options?.fileName,
       });
@@ -158,17 +127,12 @@ export class AIService {
             : `\n\nCORRECTION MODE:\nYour previous response was invalid.\nReason: ${lastValidationError || "Invalid structure"}.\nReturn JSON only and keep every required field.\nPrevious invalid response:\n${previousRawResponse.slice(0, 2000)}`;
 
         // Step 5: Ask model to extract strict JSON from the uploaded file.
-        const result = await model.generateContent([
-          `${basePrompt}${correctionHint}`,
-          {
-            inlineData: {
-              data: base64,
-              mimeType: mimeType,
-            },
-          },
-        ]);
+        const text = await this.generateAnalysisWithFallback({
+          prompt: `${basePrompt}${correctionHint}`,
+          base64,
+          mimeType,
+        });
 
-        const text = result.response.text();
         if (!text) {
           lastValidationError = "No content in AI response";
           continue;
@@ -178,7 +142,38 @@ export class AIService {
 
         try {
           // Step 6: Parse and normalize output into canonical structure.
-          const parsed = this.parseJsonResponse(text);
+          let parsed: unknown;
+
+          try {
+            parsed = this.parseJsonResponse(text);
+          } catch (parseError) {
+            console.warn(
+              "Initial JSON parse failed. Attempting repair with fallback model...",
+            );
+            const repaired = await this.repairMalformedJson(
+              text,
+              parseError instanceof Error
+                ? parseError.message
+                : "Invalid JSON response",
+            );
+
+            if (!repaired) {
+              // Emergency fallback: try to extract key fields from raw text
+              console.warn(
+                "Repair model failed. Attempting emergency field extraction...",
+              );
+              const emergency = this.emergencyExtractFields(text);
+              if (emergency) {
+                console.log("✅ Emergency extraction succeeded");
+                parsed = this.parseJsonResponse(emergency);
+              } else {
+                throw parseError;
+              }
+            } else {
+              parsed = this.parseJsonResponse(repaired);
+            }
+          }
+
           const normalized = this.normalizeAnalysis(parsed);
 
           // Step 7: Reject non-contract uploads with explicit error.
@@ -225,7 +220,7 @@ export class AIService {
         error.message?.includes("404")
       ) {
         throw new Error(
-          "Invalid Gemini model. Ensure 'gemini-2.5-flash' is available in your Google Cloud project.",
+          `Invalid Gemini model configuration. Current models: ${ANALYSIS_MODELS.join(", ")}. Check model availability in your Gemini account.`,
         );
       } else if (
         error.message?.includes("fetch") &&
@@ -234,7 +229,11 @@ export class AIService {
         throw new Error(
           "Download failed. Check if the file URL is correct and accessible.",
         );
-      } else if (error.message?.includes("JSON")) {
+      } else if (
+        error.message?.includes("JSON") ||
+        error.message?.includes("No complete JSON object") ||
+        error.message?.includes("parse failed")
+      ) {
         console.error("❌ Raw response that failed to parse:", error);
         console.error("Full error message:", error.message);
 
@@ -253,7 +252,7 @@ export class AIService {
           );
         } else {
           throw new Error(
-            "Error parsing AI response. The response may not be valid JSON. Check console for details.",
+            "AI returned a malformed response format. Please retry analysis; if it fails again, the file may require OCR cleanup.",
           );
         }
       } else if (error.message?.includes("quota")) {
@@ -267,88 +266,13 @@ export class AIService {
   }
 
   /**
-   * Build extraction prompt with strict schema + anti-hallucination instructions.
+   * Prompt generation has been moved to lib/services/ai/analysis.prompt.ts.
    */
   private static buildPrompt(input?: {
     adaptiveContext?: string;
     fileName?: string;
   }): string {
-    return `You are an expert in BFSI contract analysis (Banking, Financial Services, Insurance).
-
-Document name: ${input?.fileName ?? "Unknown"}
-
-${input?.adaptiveContext ?? ""}
-
-Analyze this contract document and extract ALL important information in the EXACT JSON format below:
-
-{
-  "title": "Descriptive contract title (e.g., Allianz Car Insurance)",
-  "type": "INSURANCE_AUTO",
-  "provider": "Name of the company or financial institution",
-  "policyNumber": "Policy number or contract number",
-  "startDate": "2024-01-01",
-  "endDate": "2024-12-31",
-  "premium": 1200.50,
-  "summary": "Clear and concise summary of the contract in a maximum of 3–4 sentences, covering the main guarantees and conditions",
-  "keyPoints": {
-    "guarantees": ["List of main guarantees or coverages provided"],
-    "exclusions": ["List of important exclusions to be aware of"],
-    "franchise": "Deductible amount or description (e.g., €500)",
-    "importantDates": ["Key dates and important deadlines"]
-  },
-  "contractValidation": {
-    "isValidContract": true,
-    "confidence": 88,
-    "reason": "Short reason if invalid, otherwise null"
-  },
-  "extractedText": "Full text extracted from the document with all details"
-}
-
-CRITICAL INSTRUCTIONS:
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-TYPE — Must be EXACTLY one of the following values:
-
-INSURANCE_AUTO (car insurance)
-
-INSURANCE_HOME (home insurance)
-
-INSURANCE_HEALTH (health insurance/mutual)
-
-INSURANCE_LIFE (life insurance)
-
-LOAN (bank loan)
-
-CREDIT_CARD (credit card)
-
-INVESTMENT (investment account)
-
-OTHER (other type)
-
-DATES — Strict format YYYY-MM-DD (e.g., 2024-01-15)
-
-PREMIUM — Decimal number only (e.g., 1200.50, no text)
-
-NULL — If information does not exist, use null (not an empty string "")
-
-CONTRACT VALIDATION — Determine whether this document is truly a contract/policy/loan agreement.
-- contractValidation.isValidContract must be false for invoices, receipts, ID cards, blank scans, random photos, marketing flyers, or unrelated files.
-- confidence must be an integer from 0 to 100.
-- reason must explain why invalid when isValidContract is false.
-
-EXTRACTED TEXT — Must contain ALL visible text from the document
-
-SUMMARY — Maximum 4 sentences, clear and informative
-
-RESPONSE — Respond ONLY with valid JSON, no text before or after, no markdown
-
-QUALITY GUARDRAILS:
-- Never invent provider names, policy numbers, dates, or premium values.
-- If uncertain, use null for that field.
-- Keep extractedText raw and faithful to the visible document content.
-- For summary and key points, prioritize practical legal and business implications.
-
-NOW ANALYZE THE DOCUMENT:`;
+    return buildAnalysisPrompt(input);
   }
 
   /**
@@ -382,86 +306,232 @@ NOW ANALYZE THE DOCUMENT:`;
   }
 
   private static parseJsonResponse(text: string): unknown {
-    if (!text || typeof text !== "string" || text.trim().length === 0) {
-      throw new Error("AI response is empty or invalid.");
-    }
+    return parseAiJsonResponse(text);
+  }
 
-    // Remove potential markdown wrappers, comments, and extra whitespace
-    let cleanJson = text
-      .replace(/```json[\s\n]*/, "") // Remove opening markdown
-      .replace(/```[\s\n]*$/, "") // Remove closing markdown
-      .replace(/\/\/.*$/gm, "") // Remove JavaScript comments
-      .trim();
+  private static async generateAnalysisWithFallback(input: {
+    prompt: string;
+    base64: string;
+    mimeType: string;
+  }): Promise<string> {
+    let lastError: unknown = null;
 
-    // Check for common issues that indicate incomplete/corrupted response
-    const responsePreview = cleanJson.substring(0, 200);
-    console.log("🔍 AI Response preview:", responsePreview);
+    for (const modelName of ANALYSIS_MODELS) {
+      try {
+        const model = genAI.getGenerativeModel({
+          model: modelName,
+          generationConfig: {
+            temperature: 0.1,
+            topP: 0.95,
+            topK: 40,
+            maxOutputTokens: 16384,
+            responseMimeType: "application/json",
+          },
+        });
 
-    // Try direct parse first
-    try {
-      const result = JSON.parse(cleanJson);
-      console.log("✅ JSON parsed successfully on first attempt");
-      return result;
-    } catch (firstError) {
-      console.warn(
-        "⚠️ First JSON parse failed:",
-        (firstError as Error).message,
-      );
-    }
+        const result = await model.generateContent([
+          input.prompt,
+          {
+            inlineData: {
+              data: input.base64,
+              mimeType: input.mimeType,
+            },
+          },
+        ]);
 
-    // Fallback 1: Try removing non-JSON text (explanations before/after JSON)
-    try {
-      const firstCurly = cleanJson.indexOf("{");
-      const lastCurly = cleanJson.lastIndexOf("}");
-
-      if (firstCurly === -1 || lastCurly === -1 || firstCurly >= lastCurly) {
-        throw new Error(
-          "No JSON object wrapper found (missing { or }). Response may be incomplete.",
-        );
-      }
-
-      // Ensure we get complete closing braces for nested objects
-      let braceCount = 0;
-      let endIndex = firstCurly;
-
-      for (let i = firstCurly; i < cleanJson.length; i++) {
-        if (cleanJson[i] === "{") braceCount++;
-        if (cleanJson[i] === "}") braceCount--;
-        if (braceCount === 0) {
-          endIndex = i;
-          break;
+        const text = result.response.text();
+        if (text && text.trim().length > 0) {
+          console.log(`✅ Analysis with model ${modelName} succeeded`);
+          return text;
         }
-      }
-
-      const jsonSlice = cleanJson.slice(firstCurly, endIndex + 1);
-      console.log("📝 Extracted JSON slice length:", jsonSlice.length);
-
-      const result = JSON.parse(jsonSlice);
-      console.log("✅ JSON parsed successfully after text removal");
-      return result;
-    } catch (fallbackError) {
-      console.error(
-        "❌ JSON fallback parsing failed:",
-        (fallbackError as Error).message,
-      );
-      console.error("Full raw response:", cleanJson.substring(0, 500));
-
-      // Last resort: Check for common formatting issues
-      if (cleanJson.includes('\\n"') || cleanJson.includes('\\"')) {
-        throw new Error(
-          "Response contains escaped quotes or newlines that couldn't be parsed. The contract may have corrupted text.",
+      } catch (error) {
+        lastError = error;
+        console.warn(
+          `Analysis with model ${modelName} failed. Trying next model.`,
+          error instanceof Error ? error.message : String(error),
         );
       }
+    }
 
-      if (!cleanJson.includes('"type"') && !cleanJson.includes('"title"')) {
-        throw new Error(
-          "Response is missing expected contract fields. It may not be a valid contract document.",
-        );
+    // All primary models failed. Try with more lenient generation settings as last resort
+    console.warn(
+      "All standard models failed. Trying with lenient generation config...",
+    );
+    try {
+      const fallbackModel = genAI.getGenerativeModel({
+        model: PRIMARY_ANALYSIS_MODEL,
+        generationConfig: {
+          temperature: 0,
+          topP: 0.9,
+          topK: 20,
+          maxOutputTokens: 16384,
+          // Don't enforce JSON format; let model produce raw output
+        },
+      });
+
+      const result = await fallbackModel.generateContent([
+        input.prompt,
+        {
+          inlineData: {
+            data: input.base64,
+            mimeType: input.mimeType,
+          },
+        },
+      ]);
+
+      const text = result.response.text();
+      if (text && text.trim().length > 0) {
+        console.log("✅ Lenient generation succeeded");
+        return text;
+      }
+    } catch (error) {
+      console.warn("Lenient generation also failed:", error);
+    }
+
+    throw lastError instanceof Error
+      ? lastError
+      : new Error("All analysis models failed to generate content.");
+  }
+
+  private static async repairMalformedJson(
+    malformedResponse: string,
+    parseError: string,
+  ): Promise<string | null> {
+    try {
+      const repairModelName = FALLBACK_ANALYSIS_MODEL;
+      const model = genAI.getGenerativeModel({
+        model: repairModelName,
+        generationConfig: {
+          temperature: 0,
+          topP: 0.9,
+          topK: 20,
+          maxOutputTokens: 16384,
+          responseMimeType: "application/json",
+        },
+      });
+
+      const expectedSchema = {
+        language: "string|null",
+        title: "string",
+        type: "enum: INSURANCE_AUTO|INSURANCE_HOME|INSURANCE_HEALTH|INSURANCE_LIFE|LOAN|CREDIT_CARD|INVESTMENT|OTHER",
+        provider: "string|null",
+        policyNumber: "string|null",
+        startDate: "YYYY-MM-DD|null",
+        endDate: "YYYY-MM-DD|null",
+        premium: "number|null",
+        premiumCurrency: "string|null (ISO code like EUR/USD/TND or symbol)",
+        summary: "string (min 10 chars)",
+        extractedText: "string (min 30 chars)",
+        keyPoints: {
+          guarantees: "string[]",
+          exclusions: "string[]",
+          franchise: "string|null",
+          importantDates: "string[]",
+          explainability:
+            "[{ field, why, sourceSnippet, sourceHints:{ page|null, section|null, confidence|null } }]",
+        },
+        keyPeople: "[{ name, role|null, email|null, phone|null }]",
+        contactInfo:
+          "{ name|null, email|null, phone|null, address|null, role|null }",
+        importantContacts:
+          "[{ name|null, email|null, phone|null, address|null, role|null }]",
+        relevantDates:
+          "[{ date:'YYYY-MM-DD', description, type:'EXPIRATION|RENEWAL|PAYMENT|REVIEW|OTHER' }]",
+        contractValidation: {
+          isValidContract: "boolean",
+          confidence: "number (0-100)",
+          reason: "string|null",
+        },
+      };
+
+      const repairPrompt = `You are a JSON repair engine for contract analysis.
+Fix the malformed JSON response below and return ONLY valid, parseable JSON conforming to this schema:
+
+${JSON.stringify(expectedSchema, null, 2)}
+
+Rules:
+1. Return ONLY the JSON object, no markdown, no explanations.
+2. Preserve all values from the original response as accurately as possible.
+3. Fix structural issues: missing braces, unescaped quotes, trailing commas, unmatched brackets.
+4. For null/missing fields, use null value or empty array [] as appropriate.
+5. Ensure all required text fields (title, summary, extractedText) have content.
+6. All numeric values must be valid numbers.
+7. All dates must be in YYYY-MM-DD format.
+8. If type is unclear, use "OTHER".
+9. Preserve explainability and evidence snippets when present.
+
+Original parse error: ${parseError}
+
+Malformed response to fix:
+${malformedResponse.slice(0, 14000)}`;
+
+      const repaired = await model.generateContent(repairPrompt);
+      const repairedText = repaired.response.text()?.trim() || "";
+
+      if (repairedText.length === 0) {
+        return null;
       }
 
-      throw new Error(
-        `Failed to parse AI response as JSON: ${(fallbackError as Error).message}`,
+      // Verify the repaired text is at least JSON-like before returning
+      if (!repairedText.includes("{")) {
+        return null;
+      }
+
+      return repairedText;
+    } catch (error) {
+      console.warn("JSON repair step failed:", error);
+      return null;
+    }
+  }
+
+  /**
+   * Emergency fallback: Extract key contract fields from raw text when JSON is completely malformed.
+   * Builds a minimal but valid JSON structure from pattern-matched fields.
+   */
+  private static emergencyExtractFields(rawText: string): string | null {
+    try {
+      const titleMatch = rawText.match(
+        /["']?title["']?\s*:\s*["']([^"']{5,200})/i,
       );
+      const summaryMatch = rawText.match(
+        /summary["']?\s*:\s*["']([^"']{10,500})/i,
+      );
+      const extractedMatch = rawText.match(
+        /extractedText["']?\s*:\s*["']([^"']{30,})/i,
+      );
+
+      if (!titleMatch || !summaryMatch) {
+        return null;
+      }
+
+      const emergency = {
+        title: titleMatch[1]?.slice(0, 200) || "Contract",
+        type: "OTHER",
+        provider: null,
+        policyNumber: null,
+        startDate: null,
+        endDate: null,
+        premium: null,
+        premiumCurrency: null,
+        summary: summaryMatch[1]?.slice(0, 500) || "Contract analysis",
+        extractedText:
+          extractedMatch?.[1]?.slice(0, 12000) || rawText.slice(0, 12000),
+        keyPoints: {
+          guarantees: [],
+          exclusions: [],
+          franchise: null,
+          importantDates: [],
+        },
+        contractValidation: {
+          isValidContract: true,
+          confidence: 50,
+          reason: "Emergency partial extraction due to response malformation",
+        },
+      };
+
+      return JSON.stringify(emergency);
+    } catch {
+      return null;
     }
   }
 
@@ -476,44 +546,24 @@ NOW ANALYZE THE DOCUMENT:`;
     mimeType: string;
     fileName?: string;
   }): Promise<ContractPrecheckResult> {
-    const model = genAI.getGenerativeModel({
-      model: "gemini-2.5-flash",
-      generationConfig: {
-        temperature: 0,
-        topP: 0.9,
-        topK: 20,
-        maxOutputTokens: 350,
-        responseMimeType: "application/json",
-      },
-    });
+    const rawText = await this.generatePrevalidationWithFallback(input);
 
-    const result = await model.generateContent([
-      `You are validating whether an uploaded document is a legal/financial contract.
+    let raw: any;
+    try {
+      raw = this.parseJsonResponse(rawText || "{}");
+    } catch (error) {
+      // If prevalidation JSON is malformed, assume it's a contract with moderate confidence
+      console.warn(
+        "Prevalidation JSON parse failed, assuming contract with moderate confidence",
+      );
+      return {
+        isValidContract: true,
+        confidence: 60,
+        reason:
+          "Prevalidation response was malformed, but document appears contract-like",
+      };
+    }
 
-File name: ${input.fileName ?? "Unknown"}
-
-Return ONLY JSON:
-{
-  "isValidContract": true,
-  "confidence": 0,
-  "reason": null
-}
-
-Rules:
-- isValidContract=false for invoices, receipts, identity cards, random photos/screenshots, blank pages, flyers, or unrelated files.
-- confidence is an integer from 0 to 100.
-- reason must be concise and user-friendly when invalid.
-- If valid, reason can be null.
-`,
-      {
-        inlineData: {
-          data: input.base64,
-          mimeType: input.mimeType,
-        },
-      },
-    ]);
-
-    const raw = this.parseJsonResponse(result.response.text() || "{}");
     const maybe = raw as Partial<ContractPrecheckResult>;
 
     const isValidContract = Boolean(maybe.isValidContract);
@@ -532,95 +582,55 @@ Rules:
     };
   }
 
+  private static async generatePrevalidationWithFallback(input: {
+    base64: string;
+    mimeType: string;
+    fileName?: string;
+  }): Promise<string> {
+    let lastError: unknown = null;
+
+    for (const modelName of ANALYSIS_MODELS) {
+      try {
+        const model = genAI.getGenerativeModel({
+          model: modelName,
+          generationConfig: {
+            temperature: 0,
+            topP: 0.9,
+            topK: 20,
+            maxOutputTokens: 350,
+            responseMimeType: "application/json",
+          },
+        });
+
+        const result = await model.generateContent([
+          buildPrevalidationPrompt(input.fileName),
+          {
+            inlineData: {
+              data: input.base64,
+              mimeType: input.mimeType,
+            },
+          },
+        ]);
+
+        const text = result.response.text();
+        if (text && text.trim().length > 0) {
+          return text;
+        }
+      } catch (error) {
+        lastError = error;
+        console.warn(
+          `Pre-validation with model ${modelName} failed. Trying next model.`,
+        );
+      }
+    }
+
+    throw lastError instanceof Error
+      ? lastError
+      : new Error("All pre-validation models failed to generate content.");
+  }
+
   private static normalizeAnalysis(input: any): NormalizedAnalysis {
-    // Ensure contract type belongs to supported enum.
-    const validTypes = new Set([
-      "INSURANCE_AUTO",
-      "INSURANCE_HOME",
-      "INSURANCE_HEALTH",
-      "INSURANCE_LIFE",
-      "LOAN",
-      "CREDIT_CARD",
-      "INVESTMENT",
-      "OTHER",
-    ]);
-
-    const type =
-      typeof input?.type === "string" && validTypes.has(input.type)
-        ? input.type
-        : null;
-
-    if (!type) {
-      throw new Error("Contract type is missing or invalid.");
-    }
-
-    const title = String(input?.title || "").trim();
-    const summary = String(input?.summary || "").trim();
-    const extractedText = String(input?.extractedText || "").trim();
-
-    if (title.length < 3) {
-      throw new Error("Title is missing or too short.");
-    }
-    if (summary.length < 10) {
-      throw new Error("Summary is missing or too short.");
-    }
-    if (extractedText.length < 50) {
-      throw new Error("Extracted text is missing or too short.");
-    }
-
-    // Helper: normalize unknown primitive into string|null.
-    const toStringOrNull = (value: unknown): string | null => {
-      const normalized = String(value ?? "").trim();
-      return normalized.length > 0 ? normalized : null;
-    };
-
-    // Helper: accept only strict ISO date values.
-    const toDateOrNull = (value: unknown): string | null => {
-      const candidate = String(value ?? "").trim();
-      if (!candidate) return null;
-
-      const isIsoDate = /^\d{4}-\d{2}-\d{2}$/.test(candidate);
-      return isIsoDate ? candidate : null;
-    };
-
-    // Helper: sanitize array values into non-empty text list.
-    const toStringList = (value: unknown): string[] => {
-      if (!Array.isArray(value)) return [];
-      return value
-        .map((item) => String(item ?? "").trim())
-        .filter((item) => item.length > 0);
-    };
-
-    // Premium must be numeric and non-negative.
-    const premiumValue =
-      input?.premium === null || input?.premium === undefined
-        ? null
-        : Number(input.premium);
-
-    const premium =
-      premiumValue !== null &&
-      Number.isFinite(premiumValue) &&
-      premiumValue >= 0
-        ? Number(premiumValue.toFixed(2))
-        : null;
-
-    return {
-      title,
-      type,
-      provider: toStringOrNull(input?.provider),
-      policyNumber: toStringOrNull(input?.policyNumber),
-      startDate: toDateOrNull(input?.startDate),
-      endDate: toDateOrNull(input?.endDate),
-      premium,
-      summary,
-      keyPoints: {
-        guarantees: toStringList(input?.keyPoints?.guarantees),
-        exclusions: toStringList(input?.keyPoints?.exclusions),
-        franchise: toStringOrNull(input?.keyPoints?.franchise),
-        importantDates: toStringList(input?.keyPoints?.importantDates),
-      },
-      extractedText,
-    };
+    return normalizeAiAnalysis(input);
   }
 
   private static async buildAdaptiveContext(userId?: string): Promise<string> {
@@ -643,6 +653,7 @@ Rules:
         provider: true,
         policyNumber: true,
         summary: true,
+        keyPoints: true,
       },
     });
 
@@ -680,6 +691,49 @@ Rules:
       .slice(0, 4)
       .map((value) => value.replace(/[A-Za-z0-9]/g, "X"));
 
+    const allExplainability = examples
+      .flatMap((item) => {
+        const maybeExplainability = (item.keyPoints as any)?.explainability;
+        return Array.isArray(maybeExplainability) ? maybeExplainability : [];
+      })
+      .slice(0, 120);
+
+    const explainabilityByField = count(
+      allExplainability
+        .map((entry: any) => String(entry?.field ?? "").trim())
+        .filter((value: string) => value.length > 0),
+    );
+
+    const confidenceValues = allExplainability
+      .map((entry: any) => Number(entry?.sourceHints?.confidence))
+      .filter((value: number) => Number.isFinite(value));
+
+    const avgEvidenceConfidence = confidenceValues.length
+      ? Math.round(
+          confidenceValues.reduce(
+            (sum: number, value: number) => sum + value,
+            0,
+          ) / confidenceValues.length,
+        )
+      : null;
+
+    const learnedLanguages = count(
+      examples
+        .map((item) => (item.keyPoints as any)?.aiMeta?.language)
+        .map((value) => String(value ?? "").trim())
+        .filter((value: string) => value.length > 0),
+    );
+
+    const learnedKeyRoles = count(
+      examples
+        .flatMap((item) => {
+          const people = (item.keyPoints as any)?.aiMeta?.keyPeople;
+          return Array.isArray(people) ? people : [];
+        })
+        .map((person: any) => String(person?.role ?? "").trim())
+        .filter((value: string) => value.length > 0),
+    );
+
     const avgSummaryLength =
       examples
         .map((item) => item.summary?.length ?? 0)
@@ -690,6 +744,10 @@ Rules:
 - Frequent provider naming patterns: ${topProviders.join(", ") || "N/A"}
 - Example policy number shape patterns: ${policyPatterns.join(", ") || "N/A"}
 - Typical summary length target: around ${Math.round(avgSummaryLength)} characters.
+- Dominant learned languages: ${learnedLanguages.join(", ") || "N/A"}
+- Most evidenced fields: ${explainabilityByField.join(", ") || "N/A"}
+- Average evidence confidence: ${avgEvidenceConfidence ?? "N/A"}
+- Frequent key roles identified: ${learnedKeyRoles.join(", ") || "N/A"}
 
 Use this context only as formatting guidance. Do not force it if current document content differs.`;
   }
@@ -711,7 +769,7 @@ Use this context only as formatting guidance. Do not force it if current documen
     const modelReason = String(raw?.contractValidation?.reason ?? "").trim();
 
     const legalSignalRegex =
-      /contract|agreement|policy|terms|clause|premium|coverage|insured|insurer|loan|borrower|credit|beneficiary|liability/i;
+      /contract|agreement|policy|terms|clause|premium|coverage|insured|insurer|loan|borrower|credit|beneficiary|liability|lease|service|supplier|client|vendor|annex|appendix|signature|party|contrat|assurance|banque|credit|emprunteur|garantie|echeance|duree|clause/i;
     const hasLegalSignals = legalSignalRegex.test(normalized.extractedText);
     const hasStructuredSignal =
       Boolean(normalized.provider) ||
@@ -730,6 +788,16 @@ Use this context only as formatting guidance. Do not force it if current documen
       throw new Error(
         `INVALID_CONTRACT:${modelReason || "Contract confidence is too low. Please upload a clearer contract document."}`,
       );
+    }
+
+    // For generic contracts mapped to OTHER, keep a lighter heuristic so valid non-BFSI contracts pass.
+    if (normalized.type === "OTHER") {
+      if (!hasLegalSignals && normalized.extractedText.length < 120) {
+        throw new Error(
+          "INVALID_CONTRACT:Uploaded file does not contain enough contract-specific signals.",
+        );
+      }
+      return;
     }
 
     if (!hasLegalSignals && !hasStructuredSignal) {
@@ -794,20 +862,10 @@ Use this context only as formatting guidance. Do not force it if current documen
       summary?: string | null;
       keyPoints?: Record<string, unknown> | null;
       extractedText?: string | null;
+      language?: string | null; // NEW: contract's detected language
     };
   }) {
     try {
-      // Configure fast Q&A model tuned for concise answers.
-      const model = genAI.getGenerativeModel({
-        model: "gemini-2.5-flash",
-        generationConfig: {
-          temperature: 0.2,
-          topP: 0.95,
-          topK: 40,
-          maxOutputTokens: 2048,
-        },
-      });
-
       // Keep context bounded to avoid overlong prompts and token waste.
       const extractedTextSnippet = (input.contract.extractedText || "")
         .slice(0, 12000)
@@ -816,10 +874,28 @@ Use this context only as formatting guidance. Do not force it if current documen
         input.contract.type,
       );
 
-      const prompt = `You are a senior BFSI contract advisor.
+      // Detect contract language for multilingual response
+      const contractLanguage = input.contract.language || "en";
+      const languageName =
+        {
+          en: "English",
+          fr: "French",
+          de: "German",
+          es: "Spanish",
+          it: "Italian",
+          pt: "Portuguese",
+          nl: "Dutch",
+          pl: "Polish",
+          ja: "Japanese",
+          zh: "Chinese",
+          ar: "Arabic",
+        }[contractLanguage] || "English";
+
+      const prompt = `You are a senior BFSI contract advisor. IMPORTANT: Respond entirely in ${languageName} to match the contract language.
 
 Contract metadata:
 - File: ${input.contract.fileName}
+- Language: ${languageName}
 - Title: ${input.contract.title ?? "N/A"}
 - Type: ${input.contract.type ?? "N/A"}
 - Provider: ${input.contract.provider ?? "N/A"}
@@ -837,12 +913,13 @@ ${JSON.stringify(input.contract.keyPoints ?? {}, null, 2)}
 Extracted Text:
 ${extractedTextSnippet || "N/A"}
 
-User question:
+User question (${languageName}):
 ${input.question}
 
 Instructions:
+- RESPOND ENTIRELY IN ${languageName}. This is critical.
 - Write in clear, professional, business-oriented plain text.
-- Do NOT use markdown or special formatting symbols, including: **, __, #, *, -, backticks.
+- Do NOT use markdown or special formatting symbols, including: **, __, #, *, -, backticks with one exception: you can use | for separators if needed for clarity
 - Do NOT quote large raw excerpts from extracted text unless strictly necessary.
 - Synthesize and explain the implications in practical terms instead of copying file content.
 - Base your answer ONLY on the provided contract content.
@@ -852,21 +929,54 @@ Instructions:
 - For legal context, use wording like: "Under general EU/US legal principles..." and avoid citing specific article numbers unless explicitly present in the contract content.
 - Never claim certainty where the contract text is ambiguous.
 - Keep the answer concise, executive, and decision-oriented.
+- Use the same language preference throughout (${languageName}).
 
-Response structure:
+Response structure (in ${languageName}):
 1) Direct answer in one sentence.
 2) Business impact in one to two sentences (risk, cost, operational effect).
 3) General legal context in one to two sentences when relevant.
 4) Recommended next step in one sentence.
 
-Compliance note:
+Compliance note (in ${languageName}):
 Include one short disclaimer only when legal context is discussed: "This is general information, not formal legal advice."`;
 
-      // Execute completion and sanitize styling artifacts from response.
-      const result = await model.generateContent(prompt);
-      const rawAnswer = result.response.text()?.trim();
+      // Execute completion with model fallback and sanitize styling artifacts.
+      let rawAnswer = "";
+      let lastError: unknown = null;
+
+      for (const modelName of ANALYSIS_MODELS) {
+        try {
+          const model = genAI.getGenerativeModel({
+            model: modelName,
+            generationConfig: {
+              temperature: 0.2,
+              topP: 0.95,
+              topK: 40,
+              maxOutputTokens: 2048,
+            },
+          });
+
+          const result = await model.generateContent(prompt);
+          rawAnswer = result.response.text()?.trim() || "";
+
+          if (rawAnswer) {
+            console.log(
+              `✅ Q&A with model ${modelName} succeeded in ${languageName}`,
+            );
+            break;
+          }
+        } catch (error) {
+          lastError = error;
+          console.warn(
+            `Q&A with model ${modelName} failed. Trying next model.`,
+          );
+        }
+      }
 
       if (!rawAnswer) {
+        if (lastError instanceof Error) {
+          throw lastError;
+        }
         throw new Error("No response generated");
       }
 

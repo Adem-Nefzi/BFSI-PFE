@@ -10,6 +10,7 @@ import type {
   ContractType,
 } from "@/types/contract.types";
 import { revalidatePath } from "next/cache";
+import { NotificationService } from "@/lib/services/notification.service";
 
 const utapi = new UTApi();
 
@@ -124,7 +125,7 @@ export class ContractService {
       return null;
     };
 
-    return await prisma.contract.update({
+    const contract = await prisma.contract.update({
       where: { id },
       data: {
         title: aiResults.title,
@@ -140,6 +141,23 @@ export class ContractService {
         status: "COMPLETED",
       },
     });
+
+    // Check for upcoming deadlines after contract is completed
+    try {
+      const user = await prisma.user.findUnique({
+        where: { id: contract.userId },
+        select: { id: true },
+      });
+
+      if (user) {
+        await NotificationService.checkUpcomingDeadlines(user.id);
+      }
+    } catch (error) {
+      console.warn("Failed to check upcoming deadlines:", error);
+      // Don't fail the contract update if deadline check fails
+    }
+
+    return contract;
   }
 
   // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

@@ -1,6 +1,12 @@
 import { auth } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
-import { DashboardNavigation } from "@/components/views/dashboard/navigation";
+import { DashboardNavigation } from "@/components/layout/navigation";
+import { Metadata } from "next";
+
+export const metadata: Metadata = {
+  title: "Dashboard | LexiChain Contract Intelligence",
+  description: "View and manage your AI-processed financial contracts, analytics, and metrics in real time.",
+};
 
 export default async function DashboardLayout({
   children,

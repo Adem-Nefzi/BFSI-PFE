@@ -1,11 +1,11 @@
 "use client";
 
-import { ContractUploadForm } from "@/components/views/dashboard/contract-upload-form";
-import { EmptyContractsState } from "@/components/views/dashboard/empty-contracts-state";
-import { ContractsList } from "@/components/views/dashboard/contracts-list";
-import { ContactsHeader } from "@/components/views/dashboard/contacts-header";
+import { ContractUploadForm } from "@/features/contracts/components/forms/contract-upload-form";
+import { EmptyContractsState } from "@/features/contracts/components/list/empty-contracts-state";
+import { ContractsList } from "@/features/contracts/components/list/contracts-list";
+import { ContactsHeader } from "@/components/layout/contacts-header";
 import { useState, useEffect } from "react";
-import { getContracts } from "@/lib/actions/contract.action";
+import { getContracts } from "@/features/contracts/api/contract.action";
 import { Card } from "@/components/ui/card";
 
 export default function ContactsPage() {

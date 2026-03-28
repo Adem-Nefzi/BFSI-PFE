@@ -70,6 +70,46 @@ interface NotificationResponse {
 }
 
 export class NotificationService {
+  static async cleanupReadNonDeadline(
+    userId: string,
+  ): Promise<NotificationResponse> {
+    try {
+      const result = await prisma.notification.deleteMany({
+        where: {
+          userId,
+          read: true,
+          NOT: {
+            type: "DEADLINE",
+          },
+        },
+      });
+
+      return {
+        success: true,
+        message: `Cleaned ${result.count} seen non-deadline notifications`,
+        data: { count: result.count },
+      };
+    } catch (error) {
+      if (isNotificationTableMissingError(error)) {
+        warnMissingNotificationTableOnce();
+        return {
+          success: true,
+          message: "Notification table missing. Read cleanup skipped.",
+          data: { count: 0 },
+        };
+      }
+
+      console.error("Error cleaning read non-deadline notifications:", error);
+      return {
+        success: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : "Failed to cleanup seen notifications",
+      };
+    }
+  }
+
   /**
    * Creates a new notification for a user
    *
@@ -162,6 +202,9 @@ export class NotificationService {
     limit: number = 10,
   ): Promise<NotificationResponse> {
     try {
+      // Enforce retention policy on each read path.
+      await this.cleanupReadNonDeadline(userId);
+
       const notifications = await prisma.notification.findMany({
         where: {
           userId,
@@ -220,6 +263,9 @@ export class NotificationService {
     limit: number = 50,
   ): Promise<NotificationResponse> {
     try {
+      // Enforce retention policy on each read path.
+      await this.cleanupReadNonDeadline(userId);
+
       const notifications = await prisma.notification.findMany({
         where: {
           userId,
@@ -282,6 +328,21 @@ export class NotificationService {
         data: { read: true },
       });
 
+      if (notification.type !== "DEADLINE") {
+        await prisma.notification.delete({
+          where: { id: notificationId },
+        });
+
+        return {
+          success: true,
+          message: "Notification marked as read and auto-deleted",
+          data: {
+            id: notificationId,
+            deleted: true,
+          },
+        };
+      }
+
       return {
         success: true,
         data: notification,
@@ -322,10 +383,13 @@ export class NotificationService {
         data: { read: true },
       });
 
+      const cleanup = await this.cleanupReadNonDeadline(userId);
+      const cleanupCount = cleanup.success ? cleanup.data?.count || 0 : 0;
+
       return {
         success: true,
-        message: `Marked ${result.count} notifications as read`,
-        data: { count: result.count },
+        message: `Marked ${result.count} notifications as read and auto-deleted ${cleanupCount} non-deadline items`,
+        data: { count: result.count, deletedCount: cleanupCount },
       };
     } catch (error) {
       if (isNotificationTableMissingError(error)) {
@@ -446,6 +510,9 @@ export class NotificationService {
    */
   static async getUnreadCount(userId: string): Promise<NotificationResponse> {
     try {
+      // Enforce retention policy on count path as well.
+      await this.cleanupReadNonDeadline(userId);
+
       const count = await prisma.notification.count({
         where: {
           userId,

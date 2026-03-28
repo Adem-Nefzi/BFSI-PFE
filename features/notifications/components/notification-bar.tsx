@@ -40,7 +40,7 @@ import {
   markAllNotificationsAsRead,
   deleteNotification,
   checkDeadlineNotifications,
-} from "@/lib/actions/notification.action";
+} from "@/features/notifications/api/notification.action";
 import { cn } from "@/lib/utils";
 
 /**
@@ -236,7 +236,7 @@ export default function NotificationBar() {
 
     const rect = triggerRef.current.getBoundingClientRect();
     const panelWidth = 420;
-    const panelHeightEstimate = panelRef.current?.offsetHeight ?? 240;
+    const panelHeightEstimate = panelRef.current?.offsetHeight ?? 340;
     const viewportPadding = 12;
 
     const preferredLeft = rect.right + 14;
@@ -475,10 +475,29 @@ export default function NotificationBar() {
     if (!isOpen) return;
 
     updatePanelPosition();
+
+    // Reposition after paint so empty-state and populated-state heights are both measured correctly.
+    const rafId = window.requestAnimationFrame(() => {
+      updatePanelPosition();
+    });
+
+    // Track panel content height changes in real time.
+    let resizeObserver: ResizeObserver | null = null;
+    if (panelRef.current && typeof ResizeObserver !== "undefined") {
+      resizeObserver = new ResizeObserver(() => {
+        updatePanelPosition();
+      });
+      resizeObserver.observe(panelRef.current);
+    }
+
     const handleResize = () => updatePanelPosition();
     window.addEventListener("resize", handleResize);
-    return () => window.removeEventListener("resize", handleResize);
-  }, [isMounted, isOpen, updatePanelPosition]);
+    return () => {
+      window.cancelAnimationFrame(rafId);
+      resizeObserver?.disconnect();
+      window.removeEventListener("resize", handleResize);
+    };
+  }, [isMounted, isOpen, updatePanelPosition, notifications.length, isLoading]);
 
   if (!isMounted) {
     return (

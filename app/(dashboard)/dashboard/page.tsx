@@ -19,13 +19,14 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { getStatsAction } from "@/lib/actions/stats.action";
-import { checkDeadlineNotifications } from "@/lib/actions/notification.action";
-import {
-  ContractStatusChart,
-  ContractTypeChart,
-  TrendChart,
-} from "@/components/views/dashboard/charts";
+import { getStatsAction } from "@/features/analytics/api/stats.action";
+import { checkDeadlineNotifications } from "@/features/notifications/api/notification.action";
+import dynamic from "next/dynamic";
+
+// Dynamically import heavy charting libraries to dramatically improve initial load and rendering time
+const ContractStatusChart = dynamic(() => import("@/features/analytics/components/charts").then(mod => mod.ContractStatusChart), { ssr: false, loading: () => <div className="h-full w-full animate-pulse bg-muted/30 rounded-lg"></div> });
+const ContractTypeChart = dynamic(() => import("@/features/analytics/components/charts").then(mod => mod.ContractTypeChart), { ssr: false, loading: () => <div className="h-full w-full animate-pulse bg-muted/30 rounded-lg"></div> });
+const TrendChart = dynamic(() => import("@/features/analytics/components/charts").then(mod => mod.TrendChart), { ssr: false, loading: () => <div className="h-full w-full animate-pulse bg-muted/30 rounded-lg"></div> });
 
 interface DashboardStats {
   totalContracts: number;

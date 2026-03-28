@@ -134,6 +134,7 @@ export async function getContracts(filters?: Record<string, unknown>) {
         : null,
       summary: contract.summary || null,
       keyPoints: contract.keyPoints || null,
+      extractedText: contract.extractedText || null,
     }));
 
     return { success: true, contracts: serializedContracts };
@@ -358,9 +359,25 @@ export async function analyzeContractAction(id: string) {
       };
     }
 
+    // Persist AI learning metadata inside keyPoints JSON so future analyses can adapt
+    // without requiring DB schema changes.
+    const keyPointsWithLearning = {
+      ...(aiResults.keyPoints ?? {}),
+      aiMeta: {
+        language: (aiResults as any).language ?? null,
+        keyPeople: (aiResults as any).keyPeople ?? [],
+        contactInfo: (aiResults as any).contactInfo ?? null,
+        importantContacts: (aiResults as any).importantContacts ?? [],
+        relevantDates: (aiResults as any).relevantDates ?? [],
+        premiumCurrency: (aiResults as any).premiumCurrency ?? null,
+        learnedAt: new Date().toISOString(),
+      },
+    };
+
     // Save AI results to database (convert nulls to undefined for optional fields)
     await ContractService.updateWithAIResults(id, {
       ...aiResults,
+      keyPoints: keyPointsWithLearning,
       provider: aiResults.provider ?? undefined,
       policyNumber: aiResults.policyNumber ?? undefined,
       startDate: aiResults.startDate ?? undefined,
@@ -516,6 +533,7 @@ export async function askContractQuestionAction(id: string, question: string) {
         keyPoints:
           (contract.keyPoints as Record<string, unknown> | null) ?? null,
         extractedText: contract.extractedText,
+        language: (contract.keyPoints as any)?.aiMeta?.language ?? null,
       },
     });
 
