@@ -26,7 +26,52 @@ import {
   saveContract as savePendingContract,
 } from "@/lib/services/contract.service";
 import { AIService } from "@/lib/services/ai.service";
+import { RAGService } from "@/lib/services/rag.service";
 import { NotificationService } from "@/lib/services/notification.service";
+import type { NormalizedAnalysis } from "@/lib/services/ai/analysis.types";
+
+type ContractListItem = Awaited<
+  ReturnType<typeof ContractService.getAll>
+>[number] & {
+  _count?: { ragChunks?: number | null };
+};
+
+type AnalysisWithMeta = NormalizedAnalysis & {
+  language?: string | null;
+  keyPeople?: Array<{
+    name: string;
+    role?: string | null;
+    email?: string | null;
+    phone?: string | null;
+  }>;
+  contactInfo?: {
+    name?: string | null;
+    email?: string | null;
+    phone?: string | null;
+    address?: string | null;
+    role?: string | null;
+  };
+  importantContacts?: Array<{
+    name?: string | null;
+    email?: string | null;
+    phone?: string | null;
+    address?: string | null;
+    role?: string | null;
+  }>;
+  relevantDates?: Array<{
+    date: string;
+    description: string;
+    type: "EXPIRATION" | "RENEWAL" | "PAYMENT" | "REVIEW" | "OTHER";
+  }>;
+  premiumCurrency?: string | null;
+};
+
+type ContractKeyPoints = {
+  aiMeta?: {
+    language?: string | null;
+    premiumCurrency?: string | null;
+  };
+};
 
 /**
  * Saves a new contract after UploadThing upload
@@ -70,12 +115,26 @@ export async function saveContract(data: {
           userId: user.id,
           type: "SUCCESS",
           title: "📄 Contract Uploaded",
-          message: `"${data.fileName}" has been uploaded successfully. Click "Analyze" to extract contract details.`,
+          message: `"${data.fileName}" has been uploaded successfully. AI analysis started automatically.`,
           contractId: result.contract.id,
           actionType: "UPLOAD_SUCCESS",
           icon: "FileCheck",
           expiresIn: 7 * 24 * 60 * 60 * 1000, // 7 days
         });
+      }
+
+      // Auto-run AI analysis immediately after upload.
+      const autoAnalysis = await analyzeContractAction(result.contract.id);
+
+      if (!autoAnalysis.success) {
+        return {
+          success: true,
+          contract: result.contract,
+          analysisSuccess: false,
+          analysisError:
+            autoAnalysis.error || "Contract uploaded but AI analysis failed.",
+          errorCode: (autoAnalysis as { errorCode?: string }).errorCode,
+        };
       }
 
       revalidatePath("/contacts");
@@ -114,7 +173,7 @@ export async function getContracts(filters?: Record<string, unknown>) {
     const contracts = await ContractService.getAll(filters);
 
     // Serialize contracts: convert Decimal to number, dates to ISO strings
-    const serializedContracts = contracts.map((contract: any) => ({
+    const serializedContracts = contracts.map((contract: ContractListItem) => ({
       id: contract.id,
       fileName: contract.fileName,
       fileSize: contract.fileSize,
@@ -135,6 +194,8 @@ export async function getContracts(filters?: Record<string, unknown>) {
       summary: contract.summary || null,
       keyPoints: contract.keyPoints || null,
       extractedText: contract.extractedText || null,
+      ragChunkCount: Number(contract?._count?.ragChunks ?? 0),
+      isRagged: Number(contract?._count?.ragChunks ?? 0) > 0,
     }));
 
     return { success: true, contracts: serializedContracts };
@@ -230,6 +291,47 @@ export async function deleteContract(id: string) {
     return { success: true, message: "Contract deleted successfully" };
   } catch (error: unknown) {
     console.error("Delete error:", error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Unknown error",
+    };
+  }
+}
+
+export async function deleteAllContractsAction() {
+  try {
+    const { userId: clerkId } = await auth();
+    if (!clerkId) {
+      return { success: false, error: "Unauthorized" };
+    }
+
+    const user = await ContractService.getUserByClerkId(clerkId);
+    if (!user) {
+      return { success: false, error: "User not found" };
+    }
+
+    const deletedCount = await ContractService.deleteAllForUser(user.id);
+
+    await NotificationService.create({
+      userId: user.id,
+      type: "SUCCESS",
+      title: "🧹 Contracts Cleared",
+      message: `All contracts were deleted successfully (${deletedCount}).`,
+      actionType: "DELETE_ALL_SUCCESS",
+      icon: "Trash2",
+      expiresIn: 24 * 60 * 60 * 1000,
+    });
+
+    revalidatePath("/contacts");
+    revalidatePath("/dashboard");
+
+    return {
+      success: true,
+      deletedCount,
+      message: "All contracts deleted successfully",
+    };
+  } catch (error: unknown) {
+    console.error("Delete all contracts error:", error);
     return {
       success: false,
       error: error instanceof Error ? error.message : "Unknown error",
@@ -361,15 +463,16 @@ export async function analyzeContractAction(id: string) {
 
     // Persist AI learning metadata inside keyPoints JSON so future analyses can adapt
     // without requiring DB schema changes.
+    const aiAnalysis = aiResults as AnalysisWithMeta;
     const keyPointsWithLearning = {
       ...(aiResults.keyPoints ?? {}),
       aiMeta: {
-        language: (aiResults as any).language ?? null,
-        keyPeople: (aiResults as any).keyPeople ?? [],
-        contactInfo: (aiResults as any).contactInfo ?? null,
-        importantContacts: (aiResults as any).importantContacts ?? [],
-        relevantDates: (aiResults as any).relevantDates ?? [],
-        premiumCurrency: (aiResults as any).premiumCurrency ?? null,
+        language: aiAnalysis.language ?? null,
+        keyPeople: aiAnalysis.keyPeople ?? [],
+        contactInfo: aiAnalysis.contactInfo ?? null,
+        importantContacts: aiAnalysis.importantContacts ?? [],
+        relevantDates: aiAnalysis.relevantDates ?? [],
+        premiumCurrency: aiAnalysis.premiumCurrency ?? null,
         learnedAt: new Date().toISOString(),
       },
     };
@@ -383,6 +486,14 @@ export async function analyzeContractAction(id: string) {
       startDate: aiResults.startDate ?? undefined,
       endDate: aiResults.endDate ?? undefined,
       premium: aiResults.premium ?? undefined,
+    });
+
+    // Build persistent RAG chunks for grounded contract Q&A.
+    await RAGService.upsertContractChunks({
+      contractId: id,
+      extractedText: aiResults.extractedText,
+      summary: aiResults.summary,
+      keyPoints: keyPointsWithLearning,
     });
 
     // Create success notification with extracted info
@@ -425,7 +536,6 @@ export async function analyzeContractAction(id: string) {
 
       // Create error notification
       if (user) {
-        const contract = await ContractService.getById(id);
         await NotificationService.create({
           userId: user.id,
           type: "ERROR",
@@ -515,10 +625,18 @@ export async function askContractQuestionAction(id: string, question: string) {
       };
     }
 
+    const ragDiagnostics = await RAGService.retrieveRelevantChunks({
+      contractId: contract.id,
+      question: trimmedQuestion,
+      topK: 6,
+    });
+
     // Ask AI about contract with full context
     const answer = await AIService.askAboutContract({
       question: trimmedQuestion,
+      ragChunks: ragDiagnostics,
       contract: {
+        id: contract.id,
         fileName: contract.fileName,
         title: contract.title,
         type: contract.type,
@@ -533,11 +651,21 @@ export async function askContractQuestionAction(id: string, question: string) {
         keyPoints:
           (contract.keyPoints as Record<string, unknown> | null) ?? null,
         extractedText: contract.extractedText,
-        language: (contract.keyPoints as any)?.aiMeta?.language ?? null,
+        language:
+          (contract.keyPoints as ContractKeyPoints | null)?.aiMeta?.language ??
+          null,
       },
     });
 
-    return { success: true, answer };
+    return {
+      success: true,
+      answer,
+      ragDiagnostics: ragDiagnostics.map((chunk) => ({
+        chunkIndex: chunk.chunkIndex,
+        score: Number(chunk.score.toFixed(4)),
+        preview: chunk.content.slice(0, 280),
+      })),
+    };
   } catch (error: unknown) {
     console.error("Ask contract question error:", error);
     return {

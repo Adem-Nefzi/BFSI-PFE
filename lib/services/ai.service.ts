@@ -6,34 +6,70 @@ import {
   ContractPrecheckResult,
   NormalizedAnalysis,
 } from "@/lib/services/ai/analysis.types";
+import type { Prisma } from "@prisma/client";
 import {
   buildAnalysisPrompt,
   buildPrevalidationPrompt,
 } from "@/lib/services/ai/analysis.prompt";
 import { parseJsonResponse as parseAiJsonResponse } from "@/lib/services/ai/analysis.parser";
 import { normalizeAnalysis as normalizeAiAnalysis } from "@/lib/services/ai/analysis.normalizer";
+import { RAGService } from "@/lib/services/rag.service";
 
-// Read API key from environment once at module load.
-const API_KEY =
-  process.env.AI_API_KEY || process.env.AI_API_KEY2 || process.env.AI_API_KEY3;
-
-if (!API_KEY) {
-  console.error("❌ AI_API_KEY is missing from environment variables");
-  console.error("Please add AI_API_KEY to your .env file");
-  throw new Error("AI_API_KEY is not configured");
-}
-
-// Initialize Gemini
-const genAI = new GoogleGenerativeAI(API_KEY);
+import { keyManager } from "@/lib/services/ai/key-manager";
 
 const PRIMARY_ANALYSIS_MODEL =
-  process.env.AI_MODEL_PRIMARY || "gemini-2.5-flash";
+  process.env.AI_MODEL_PRIMARY || "gemini-3.1-flash-lite-preview";
 const FALLBACK_ANALYSIS_MODEL =
   process.env.AI_MODEL_FALLBACK || "gemini-2.0-flash";
 
 const ANALYSIS_MODELS = Array.from(
   new Set([PRIMARY_ANALYSIS_MODEL, FALLBACK_ANALYSIS_MODEL]),
 );
+
+type ValidationEnvelope = {
+  contractValidation?: {
+    isValidContract?: boolean;
+    confidence?: number;
+    reason?: string | null;
+  };
+};
+
+type PrevalidationResponse = {
+  isValidContract?: boolean;
+  confidence?: number;
+  reason?: string | null;
+};
+
+type AdaptiveExplainability = {
+  field?: string;
+  sourceHints?: {
+    confidence?: number;
+  };
+};
+
+type AdaptiveAiMeta = {
+  language?: string | null;
+  keyPeople?: Array<{ role?: string | null }>;
+};
+
+type AdaptiveKeyPoints = {
+  explainability?: AdaptiveExplainability[];
+  aiMeta?: AdaptiveAiMeta;
+};
+
+type AdaptiveContractExample = {
+  type?: string | null;
+  provider?: string | null;
+  policyNumber?: string | null;
+  summary?: string | null;
+  keyPoints?: Prisma.JsonValue | null;
+};
+
+const isAdaptiveKeyPoints = (
+  value: Prisma.JsonValue | null | undefined,
+): value is AdaptiveKeyPoints => {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+};
 
 export class AIService {
   /**
@@ -77,6 +113,7 @@ export class AIService {
    * Supports both PDF and image files
    */
   static async analyzeContract(fileUrl: string, options?: AnalyzeOptions) {
+    keyManager.resetKeys();
     try {
       const maxRetries = Math.min(3, Math.max(1, options?.maxRetries ?? 2));
 
@@ -191,10 +228,12 @@ export class AIService {
           );
 
           return normalized;
-        } catch (validationError: any) {
+        } catch (validationError: unknown) {
           // If validation fails, keep reason and retry with correction guidance.
           lastValidationError =
-            validationError?.message || "Failed to parse model output";
+            validationError instanceof Error
+              ? validationError.message
+              : "Failed to parse model output";
           if (attempt === maxRetries) {
             throw new Error(lastValidationError);
           }
@@ -202,51 +241,53 @@ export class AIService {
       }
 
       throw new Error("AI analysis failed after retries.");
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
       // Better error messages
-      if (error.message?.includes("API key")) {
+      if (errorMessage.includes("API key")) {
         throw new Error(
           "Invalid or missing Gemini API key. Check AI_API_KEY in your .env file",
         );
-      } else if (error.message?.includes("INVALID_CONTRACT:")) {
-        const reason = String(error.message)
+      } else if (errorMessage.includes("INVALID_CONTRACT:")) {
+        const reason = String(errorMessage)
           .replace("INVALID_CONTRACT:", "")
           .trim();
         throw new Error(
           reason || "Uploaded file is not recognized as a valid contract.",
         );
       } else if (
-        error.message?.includes("not found") ||
-        error.message?.includes("404")
+        errorMessage.includes("not found") ||
+        errorMessage.includes("404")
       ) {
         throw new Error(
           `Invalid Gemini model configuration. Current models: ${ANALYSIS_MODELS.join(", ")}. Check model availability in your Gemini account.`,
         );
       } else if (
-        error.message?.includes("fetch") &&
-        !error.message?.includes("generativelanguage")
+        errorMessage.includes("fetch") &&
+        !errorMessage.includes("generativelanguage")
       ) {
         throw new Error(
           "Download failed. Check if the file URL is correct and accessible.",
         );
       } else if (
-        error.message?.includes("JSON") ||
-        error.message?.includes("No complete JSON object") ||
-        error.message?.includes("parse failed")
+        errorMessage.includes("JSON") ||
+        errorMessage.includes("No complete JSON object") ||
+        errorMessage.includes("parse failed")
       ) {
         console.error("❌ Raw response that failed to parse:", error);
-        console.error("Full error message:", error.message);
+        console.error("Full error message:", errorMessage);
 
         // Help user understand what went wrong
-        if (error.message?.includes("escaped quotes")) {
+        if (errorMessage.includes("escaped quotes")) {
           throw new Error(
             "The contract contains special characters that corrupted the analysis. Try uploading a cleaner version.",
           );
-        } else if (error.message?.includes("incomplete")) {
+        } else if (errorMessage.includes("incomplete")) {
           throw new Error(
             "AI analysis failed to complete properly. This might be a large or complex contract. Try a smaller contract first.",
           );
-        } else if (error.message?.includes("missing expected")) {
+        } else if (errorMessage.includes("missing expected")) {
           throw new Error(
             "This doesn't appear to be a valid financial/insurance contract. Please upload a legitimate contract document.",
           );
@@ -255,12 +296,12 @@ export class AIService {
             "AI returned a malformed response format. Please retry analysis; if it fails again, the file may require OCR cleanup.",
           );
         }
-      } else if (error.message?.includes("quota")) {
+      } else if (errorMessage.includes("quota")) {
         throw new Error(
           "Limit exceeded. Your Gemini API quota may be exhausted. Check your Google Cloud Console for usage details.",
         );
       } else {
-        throw new Error(`Error analyzing contract: ${error.message}`);
+        throw new Error(`Error analyzing contract: ${errorMessage}`);
       }
     }
   }
@@ -318,33 +359,37 @@ export class AIService {
 
     for (const modelName of ANALYSIS_MODELS) {
       try {
-        const model = genAI.getGenerativeModel({
-          model: modelName,
-          generationConfig: {
-            temperature: 0.1,
-            topP: 0.95,
-            topK: 40,
-            maxOutputTokens: 16384,
-            responseMimeType: "application/json",
-          },
-        });
-
-        const result = await model.generateContent([
-          input.prompt,
-          {
-            inlineData: {
-              data: input.base64,
-              mimeType: input.mimeType,
+        return await keyManager.execute(async (genAI) => {
+          const model = genAI.getGenerativeModel({
+            model: modelName,
+            generationConfig: {
+              temperature: 0,
+              topP: 0.95,
+              topK: 40,
+              maxOutputTokens: 16384,
+              responseMimeType: "application/json",
             },
-          },
-        ]);
+          });
 
-        const text = result.response.text();
-        if (text && text.trim().length > 0) {
-          console.log(`✅ Analysis with model ${modelName} succeeded`);
-          return text;
-        }
-      } catch (error) {
+          const result = await model.generateContent([
+            input.prompt,
+            {
+              inlineData: {
+                data: input.base64,
+                mimeType: input.mimeType,
+              },
+            },
+          ]);
+
+          const text = result.response.text();
+          if (text && text.trim().length > 0) {
+            console.log(`✅ Analysis with model ${modelName} succeeded`);
+            return text;
+          }
+          throw new Error("Empty response");
+        });
+      } catch (error: any) {
+        if (error.message?.includes("CRITICAL_KEY_EXHAUSTION")) throw error;
         lastError = error;
         console.warn(
           `Analysis with model ${modelName} failed. Trying next model.`,
@@ -358,33 +403,37 @@ export class AIService {
       "All standard models failed. Trying with lenient generation config...",
     );
     try {
-      const fallbackModel = genAI.getGenerativeModel({
-        model: PRIMARY_ANALYSIS_MODEL,
-        generationConfig: {
-          temperature: 0,
-          topP: 0.9,
-          topK: 20,
-          maxOutputTokens: 16384,
-          // Don't enforce JSON format; let model produce raw output
-        },
-      });
-
-      const result = await fallbackModel.generateContent([
-        input.prompt,
-        {
-          inlineData: {
-            data: input.base64,
-            mimeType: input.mimeType,
+      return await keyManager.execute(async (genAI) => {
+        const fallbackModel = genAI.getGenerativeModel({
+          model: PRIMARY_ANALYSIS_MODEL,
+          generationConfig: {
+            temperature: 0,
+            topP: 0.9,
+            topK: 20,
+            maxOutputTokens: 16384,
+            // Don't enforce JSON format; let model produce raw output
           },
-        },
-      ]);
+        });
 
-      const text = result.response.text();
-      if (text && text.trim().length > 0) {
-        console.log("✅ Lenient generation succeeded");
-        return text;
-      }
-    } catch (error) {
+        const result = await fallbackModel.generateContent([
+          input.prompt,
+          {
+            inlineData: {
+              data: input.base64,
+              mimeType: input.mimeType,
+            },
+          },
+        ]);
+
+        const text = result.response.text();
+        if (text && text.trim().length > 0) {
+          console.log("✅ Lenient generation succeeded");
+          return text;
+        }
+        throw new Error("Empty response from fallback");
+      });
+    } catch (error: any) {
+      if (error.message?.includes("CRITICAL_KEY_EXHAUSTION")) throw error;
       console.warn("Lenient generation also failed:", error);
     }
 
@@ -398,46 +447,47 @@ export class AIService {
     parseError: string,
   ): Promise<string | null> {
     try {
-      const repairModelName = FALLBACK_ANALYSIS_MODEL;
-      const model = genAI.getGenerativeModel({
-        model: repairModelName,
-        generationConfig: {
-          temperature: 0,
-          topP: 0.9,
-          topK: 20,
-          maxOutputTokens: 16384,
-          responseMimeType: "application/json",
-        },
-      });
+      return await keyManager.execute(async (genAI) => {
+        const repairModelName = FALLBACK_ANALYSIS_MODEL;
+        const model = genAI.getGenerativeModel({
+          model: repairModelName,
+          generationConfig: {
+            temperature: 0,
+            topP: 0.9,
+            topK: 20,
+            maxOutputTokens: 16384,
+            responseMimeType: "application/json",
+          },
+        });
 
-      const expectedSchema = {
-        language: "string|null",
-        title: "string",
-        type: "enum: INSURANCE_AUTO|INSURANCE_HOME|INSURANCE_HEALTH|INSURANCE_LIFE|LOAN|CREDIT_CARD|INVESTMENT|OTHER",
-        provider: "string|null",
-        policyNumber: "string|null",
-        startDate: "YYYY-MM-DD|null",
-        endDate: "YYYY-MM-DD|null",
-        premium: "number|null",
-        premiumCurrency: "string|null (ISO code like EUR/USD/TND or symbol)",
-        summary: "string (min 10 chars)",
-        extractedText: "string (min 30 chars)",
-        keyPoints: {
-          guarantees: "string[]",
-          exclusions: "string[]",
-          franchise: "string|null",
-          importantDates: "string[]",
-          explainability:
-            "[{ field, why, sourceSnippet, sourceHints:{ page|null, section|null, confidence|null } }]",
-        },
-        keyPeople: "[{ name, role|null, email|null, phone|null }]",
-        contactInfo:
-          "{ name|null, email|null, phone|null, address|null, role|null }",
-        importantContacts:
-          "[{ name|null, email|null, phone|null, address|null, role|null }]",
-        relevantDates:
-          "[{ date:'YYYY-MM-DD', description, type:'EXPIRATION|RENEWAL|PAYMENT|REVIEW|OTHER' }]",
-        contractValidation: {
+        const expectedSchema = {
+          language: "string|null",
+          title: "string",
+          type: "enum: INSURANCE_AUTO|INSURANCE_HOME|INSURANCE_HEALTH|INSURANCE_LIFE|LOAN|CREDIT_CARD|INVESTMENT|OTHER",
+          provider: "string|null",
+          policyNumber: "string|null",
+          startDate: "YYYY-MM-DD|null",
+          endDate: "YYYY-MM-DD|null",
+          premium: "number|null",
+          premiumCurrency: "string|null (ISO code like EUR/USD/TND or symbol)",
+          summary: "string (min 10 chars)",
+          extractedText: "string (min 30 chars)",
+          keyPoints: {
+            guarantees: "string[]",
+            exclusions: "string[]",
+            franchise: "string|null",
+            importantDates: "string[]",
+            explainability:
+              "[{ field, why, sourceSnippet, sourceHints:{ page|null, section|null, confidence|null } }]",
+          },
+          keyPeople: "[{ name, role|null, email|null, phone|null }]",
+          contactInfo:
+            "{ name|null, email|null, phone|null, address|null, role|null }",
+          importantContacts:
+            "[{ name|null, email|null, phone|null, address|null, role|null }]",
+          relevantDates:
+            "[{ date:'YYYY-MM-DD', description, type:'EXPIRATION|RENEWAL|PAYMENT|REVIEW|OTHER' }]",
+          contractValidation: {
           isValidContract: "boolean",
           confidence: "number (0-100)",
           reason: "string|null",
@@ -478,7 +528,9 @@ ${malformedResponse.slice(0, 14000)}`;
       }
 
       return repairedText;
-    } catch (error) {
+      });
+    } catch (error: any) {
+      if (error.message?.includes("CRITICAL_KEY_EXHAUSTION")) throw error;
       console.warn("JSON repair step failed:", error);
       return null;
     }
@@ -548,10 +600,10 @@ ${malformedResponse.slice(0, 14000)}`;
   }): Promise<ContractPrecheckResult> {
     const rawText = await this.generatePrevalidationWithFallback(input);
 
-    let raw: any;
+    let raw: PrevalidationResponse;
     try {
-      raw = this.parseJsonResponse(rawText || "{}");
-    } catch (error) {
+      raw = this.parseJsonResponse(rawText || "{}") as PrevalidationResponse;
+    } catch {
       // If prevalidation JSON is malformed, assume it's a contract with moderate confidence
       console.warn(
         "Prevalidation JSON parse failed, assuming contract with moderate confidence",
@@ -591,32 +643,36 @@ ${malformedResponse.slice(0, 14000)}`;
 
     for (const modelName of ANALYSIS_MODELS) {
       try {
-        const model = genAI.getGenerativeModel({
-          model: modelName,
-          generationConfig: {
-            temperature: 0,
-            topP: 0.9,
-            topK: 20,
-            maxOutputTokens: 350,
-            responseMimeType: "application/json",
-          },
-        });
-
-        const result = await model.generateContent([
-          buildPrevalidationPrompt(input.fileName),
-          {
-            inlineData: {
-              data: input.base64,
-              mimeType: input.mimeType,
+        return await keyManager.execute(async (genAI) => {
+          const model = genAI.getGenerativeModel({
+            model: modelName,
+            generationConfig: {
+              temperature: 0,
+              topP: 0.9,
+              topK: 20,
+              maxOutputTokens: 350,
+              responseMimeType: "application/json",
             },
-          },
-        ]);
+          });
 
-        const text = result.response.text();
-        if (text && text.trim().length > 0) {
-          return text;
-        }
-      } catch (error) {
+          const result = await model.generateContent([
+            buildPrevalidationPrompt(input.fileName),
+            {
+              inlineData: {
+                data: input.base64,
+                mimeType: input.mimeType,
+              },
+            },
+          ]);
+
+          const text = result.response.text();
+          if (text && text.trim().length > 0) {
+            return text;
+          }
+          throw new Error("Empty response");
+        });
+      } catch (error: any) {
+        if (error.message?.includes("CRITICAL_KEY_EXHAUSTION")) throw error;
         lastError = error;
         console.warn(
           `Pre-validation with model ${modelName} failed. Trying next model.`,
@@ -629,7 +685,7 @@ ${malformedResponse.slice(0, 14000)}`;
       : new Error("All pre-validation models failed to generate content.");
   }
 
-  private static normalizeAnalysis(input: any): NormalizedAnalysis {
+  private static normalizeAnalysis(input: unknown): NormalizedAnalysis {
     return normalizeAiAnalysis(input);
   }
 
@@ -639,7 +695,7 @@ ${malformedResponse.slice(0, 14000)}`;
       return "";
     }
 
-    const examples = await prisma.contract.findMany({
+    const examples: AdaptiveContractExample[] = await prisma.contract.findMany({
       where: {
         userId,
         status: "COMPLETED",
@@ -693,19 +749,21 @@ ${malformedResponse.slice(0, 14000)}`;
 
     const allExplainability = examples
       .flatMap((item) => {
-        const maybeExplainability = (item.keyPoints as any)?.explainability;
+        const maybeExplainability = isAdaptiveKeyPoints(item.keyPoints)
+          ? item.keyPoints.explainability
+          : undefined;
         return Array.isArray(maybeExplainability) ? maybeExplainability : [];
       })
       .slice(0, 120);
 
     const explainabilityByField = count(
       allExplainability
-        .map((entry: any) => String(entry?.field ?? "").trim())
+        .map((entry) => String(entry?.field ?? "").trim())
         .filter((value: string) => value.length > 0),
     );
 
     const confidenceValues = allExplainability
-      .map((entry: any) => Number(entry?.sourceHints?.confidence))
+      .map((entry) => Number(entry?.sourceHints?.confidence))
       .filter((value: number) => Number.isFinite(value));
 
     const avgEvidenceConfidence = confidenceValues.length
@@ -719,7 +777,11 @@ ${malformedResponse.slice(0, 14000)}`;
 
     const learnedLanguages = count(
       examples
-        .map((item) => (item.keyPoints as any)?.aiMeta?.language)
+        .map((item) =>
+          isAdaptiveKeyPoints(item.keyPoints)
+            ? item.keyPoints.aiMeta?.language
+            : null,
+        )
         .map((value) => String(value ?? "").trim())
         .filter((value: string) => value.length > 0),
     );
@@ -727,10 +789,12 @@ ${malformedResponse.slice(0, 14000)}`;
     const learnedKeyRoles = count(
       examples
         .flatMap((item) => {
-          const people = (item.keyPoints as any)?.aiMeta?.keyPeople;
+          const people = isAdaptiveKeyPoints(item.keyPoints)
+            ? item.keyPoints.aiMeta?.keyPeople
+            : undefined;
           return Array.isArray(people) ? people : [];
         })
-        .map((person: any) => String(person?.role ?? "").trim())
+        .map((person) => String(person?.role ?? "").trim())
         .filter((value: string) => value.length > 0),
     );
 
@@ -761,12 +825,15 @@ Use this context only as formatting guidance. Do not force it if current documen
    * - Heuristic text signals suggest non-contract content
    */
   private static assertValidContract(
-    raw: any,
+    raw: unknown,
     normalized: NormalizedAnalysis,
   ): void {
-    const modelIsValid = raw?.contractValidation?.isValidContract;
-    const confidenceRaw = Number(raw?.contractValidation?.confidence);
-    const modelReason = String(raw?.contractValidation?.reason ?? "").trim();
+    const validation = raw as ValidationEnvelope;
+    const modelIsValid = validation.contractValidation?.isValidContract;
+    const confidenceRaw = Number(validation.contractValidation?.confidence);
+    const modelReason = String(
+      validation.contractValidation?.reason ?? "",
+    ).trim();
 
     const legalSignalRegex =
       /contract|agreement|policy|terms|clause|premium|coverage|insured|insurer|loan|borrower|credit|beneficiary|liability|lease|service|supplier|client|vendor|annex|appendix|signature|party|contrat|assurance|banque|credit|emprunteur|garantie|echeance|duree|clause/i;
@@ -810,7 +877,7 @@ Use this context only as formatting guidance. Do not force it if current documen
   /**
    * Validate that AI results have all required fields
    */
-  static validateAnalysis(data: any): boolean {
+  static validateAnalysis(data: unknown): boolean {
     try {
       // Validation uses same normalizer used in production flow.
       this.normalizeAnalysis(data);
@@ -832,7 +899,7 @@ Use this context only as formatting guidance. Do not force it if current documen
         return undefined;
       }
       return date;
-    } catch (error) {
+    } catch {
       return undefined;
     }
   }
@@ -850,7 +917,9 @@ Use this context only as formatting guidance. Do not force it if current documen
 
   static async askAboutContract(input: {
     question: string;
+    ragChunks?: Array<{ chunkIndex: number; content: string; score: number }>;
     contract: {
+      id: string;
       fileName: string;
       title?: string | null;
       type?: string | null;
@@ -866,10 +935,31 @@ Use this context only as formatting guidance. Do not force it if current documen
     };
   }) {
     try {
+      // Retrieve best matching persisted chunks for grounded Q&A.
+      let ragChunks = input.ragChunks ?? [];
+      if (ragChunks.length === 0) {
+        try {
+          ragChunks = await RAGService.retrieveRelevantChunks({
+            contractId: input.contract.id,
+            question: input.question,
+            topK: 6,
+          });
+        } catch (error) {
+          console.warn(
+            "RAG chunk retrieval failed. Falling back to extracted snippet.",
+            error,
+          );
+        }
+      }
+
       // Keep context bounded to avoid overlong prompts and token waste.
       const extractedTextSnippet = (input.contract.extractedText || "")
-        .slice(0, 12000)
+        .slice(0, 5000)
         .trim();
+      const ragContext =
+        ragChunks.length > 0
+          ? RAGService.buildChunkContext(ragChunks)
+          : extractedTextSnippet || "N/A";
       const contractTypeGuidance = this.getContractTypeGuidance(
         input.contract.type,
       );
@@ -910,8 +1000,8 @@ ${input.contract.summary ?? "N/A"}
 Key Points (JSON):
 ${JSON.stringify(input.contract.keyPoints ?? {}, null, 2)}
 
-Extracted Text:
-${extractedTextSnippet || "N/A"}
+Grounded RAG Context:
+${ragContext}
 
 User question (${languageName}):
 ${input.question}
@@ -923,6 +1013,7 @@ Instructions:
 - Do NOT quote large raw excerpts from extracted text unless strictly necessary.
 - Synthesize and explain the implications in practical terms instead of copying file content.
 - Base your answer ONLY on the provided contract content.
+- Prioritize information from Grounded RAG Context over any assumptions.
 - Adapt answer emphasis using this type guidance: ${contractTypeGuidance}
 - If information is missing, explicitly say: Information not found in the analyzed contract.
 - If the question asks about legal consequences or non-compliance, provide general legal context for EU/USA at a high level only.
@@ -930,6 +1021,7 @@ Instructions:
 - Never claim certainty where the contract text is ambiguous.
 - Keep the answer concise, executive, and decision-oriented.
 - Use the same language preference throughout (${languageName}).
+- Add one short evidence line at the end in this format: Source basis: Chunk X, Chunk Y (or Source basis: extracted contract text).
 
 Response structure (in ${languageName}):
 1) Direct answer in one sentence.
@@ -946,26 +1038,34 @@ Include one short disclaimer only when legal context is discussed: "This is gene
 
       for (const modelName of ANALYSIS_MODELS) {
         try {
-          const model = genAI.getGenerativeModel({
-            model: modelName,
-            generationConfig: {
-              temperature: 0.2,
-              topP: 0.95,
-              topK: 40,
-              maxOutputTokens: 2048,
-            },
+          rawAnswer = await keyManager.execute(async (genAI) => {
+            const model = genAI.getGenerativeModel({
+              model: modelName,
+              generationConfig: {
+                temperature: 0.2,
+                topP: 0.95,
+                topK: 40,
+                maxOutputTokens: 2048,
+              },
+            });
+
+            const result = await model.generateContent(prompt);
+            const text = result.response.text()?.trim() || "";
+
+            if (text) {
+              console.log(
+                `✅ Q&A with model ${modelName} succeeded in ${languageName}`,
+              );
+              return text;
+            }
+            throw new Error("Empty response");
           });
 
-          const result = await model.generateContent(prompt);
-          rawAnswer = result.response.text()?.trim() || "";
-
           if (rawAnswer) {
-            console.log(
-              `✅ Q&A with model ${modelName} succeeded in ${languageName}`,
-            );
             break;
           }
-        } catch (error) {
+        } catch (error: any) {
+          if (error.message?.includes("CRITICAL_KEY_EXHAUSTION")) throw error;
           lastError = error;
           console.warn(
             `Q&A with model ${modelName} failed. Trying next model.`,
@@ -990,11 +1090,13 @@ Include one short disclaimer only when legal context is discussed: "This is gene
         .trim();
 
       return sanitizedAnswer;
-    } catch (error: any) {
-      if (error.message?.includes("API key")) {
+    } catch (error: unknown) {
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+      if (errorMessage.includes("API key")) {
         throw new Error("Invalid or missing Gemini API key.");
       }
-      throw new Error(`Error answering question: ${error.message}`);
+      throw new Error(`Error answering question: ${errorMessage}`);
     }
   }
 }

@@ -140,7 +140,7 @@ export async function POST(req: Request) {
 
       try {
         // Delete user (CASCADE will delete all related contracts)
-        await prisma.user.delete({
+        await prisma.user.deleteMany({
           where: { clerkId: id },
         });
 

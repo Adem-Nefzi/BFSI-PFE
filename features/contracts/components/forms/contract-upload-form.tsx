@@ -1,7 +1,14 @@
 "use client";
 
+import { useState } from "react";
 import { UploadDropzone } from "@uploadthing/react";
-import { AlertCircle, Sparkles, Wand2, ShieldCheck } from "lucide-react";
+import {
+  AlertCircle,
+  Sparkles,
+  Wand2,
+  ShieldCheck,
+  Loader2,
+} from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { saveContract } from "@/features/contracts/api/contract.action";
 import { toast } from "sonner";
@@ -14,6 +21,7 @@ export function ContractUploadForm({
   onUploadSuccess: () => void;
 }) {
   const router = useRouter();
+  const [isAutoAnalyzing, setIsAutoAnalyzing] = useState(false);
 
   const emitNotificationRefresh = () => {
     window.dispatchEvent(new Event("notifications:refresh"));
@@ -77,25 +85,50 @@ export function ContractUploadForm({
             }
 
             const file = res[0];
+            setIsAutoAnalyzing(true);
 
-            // Save to database
-            const result = await saveContract({
-              fileName: file.name,
-              fileUrl: file.url,
-              fileSize: file.size,
-              mimeType: file.type,
-            });
+            try {
+              // Save to database
+              const result = await saveContract({
+                fileName: file.name,
+                fileUrl: file.url,
+                fileSize: file.size,
+                mimeType: file.type,
+              });
 
-            if (result.success) {
-              toast.success("Contract uploaded successfully!");
-              emitNotificationRefresh();
-              onUploadSuccess();
-              router.refresh();
-            } else {
-              toast.error(result.error || "Failed to save contract");
+              if (result.success) {
+                if (
+                  (result as { analysisSuccess?: boolean }).analysisSuccess ===
+                  false
+                ) {
+                  toast.warning(
+                    (result as { analysisError?: string }).analysisError ||
+                      "Contract uploaded, but analysis failed.",
+                  );
+                } else {
+                  toast.success("Contract uploaded and analyzed successfully!");
+                }
+
+                emitNotificationRefresh();
+                onUploadSuccess();
+                router.refresh();
+              } else {
+                const fallbackError =
+                  "error" in result ? result.error : "Failed to save contract";
+                toast.error(fallbackError);
+              }
+            } catch (error) {
+              toast.error(
+                error instanceof Error
+                  ? error.message
+                  : "Unexpected error during analysis",
+              );
+            } finally {
+              setIsAutoAnalyzing(false);
             }
           }}
           onUploadError={(error: Error) => {
+            setIsAutoAnalyzing(false);
             toast.error(`Upload failed: ${error.message}`);
           }}
           appearance={{
@@ -126,7 +159,7 @@ export function ContractUploadForm({
             <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0 text-accent" />
             <div>
               <div className="mb-1 font-semibold text-foreground">AI Flow</div>
-              <div>Upload first, then click Analyze when ready</div>
+              <div>Upload starts instant AI analysis + RAG indexing</div>
             </div>
           </div>
         </div>
@@ -136,6 +169,53 @@ export function ContractUploadForm({
           Extraction quality improves as more contracts are analyzed.
         </div>
       </div>
+
+      {isAutoAnalyzing && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 backdrop-blur-sm animate-in fade-in duration-300">
+          <div className="mx-4 max-w-md rounded-3xl border border-border/60 bg-[radial-gradient(circle_at_top_right,hsl(var(--primary)/0.22),transparent_45%),radial-gradient(circle_at_bottom_left,hsl(var(--secondary)/0.16),transparent_45%),hsl(var(--background))] p-8 shadow-2xl md:p-10 zoom-in-95 animate-in duration-300">
+            <div className="flex flex-col items-center text-center space-y-6">
+              <div className="relative">
+                <div className="absolute inset-0 rounded-full bg-primary/30 blur-xl animate-pulse"></div>
+                <div className="relative rounded-full bg-gradient-to-br from-primary to-accent p-4">
+                  <Sparkles className="h-8 w-8 animate-pulse text-white" />
+                </div>
+              </div>
+
+              <div className="relative">
+                <Loader2 className="h-11 w-11 animate-spin text-primary" />
+              </div>
+
+              <div className="space-y-2">
+                <h3 className="text-xl font-semibold text-foreground">
+                  Analyzing And Building RAG
+                </h3>
+                <p className="text-sm text-muted-foreground">
+                  Your contract is being analyzed and indexed for chat...
+                </p>
+              </div>
+
+              <div className="w-full space-y-2">
+                <div className="flex items-center justify-between text-xs text-muted-foreground">
+                  <span>Processing</span>
+                  <span className="flex items-center gap-1.5">
+                    <span className="h-1.5 w-1.5 rounded-full bg-primary animate-bounce [animation-delay:-0.3s]"></span>
+                    <span className="h-1.5 w-1.5 rounded-full bg-primary animate-bounce [animation-delay:-0.15s]"></span>
+                    <span className="h-1.5 w-1.5 rounded-full bg-primary animate-bounce"></span>
+                  </span>
+                </div>
+
+                <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+                  <div className="h-full w-full rounded-full bg-gradient-to-r from-primary to-accent animate-progress-loading origin-left"></div>
+                </div>
+              </div>
+
+              <p className="text-xs text-muted-foreground italic">
+                This may take up to 10 seconds
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
     </Card>
   );
 }

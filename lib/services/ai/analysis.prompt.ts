@@ -22,12 +22,12 @@ CRITICAL: Your response must be VALID, PARSEABLE JSON only. Do not include markd
   "endDate": "2025-12-31",
   "premium": 1200.50,
   "premiumCurrency": "TND",
-  "summary": "Professional, comprehensive 4-6 sentence summary in the contract's language. Include: main parties, key obligations, coverage/benefits, exclusions, important deadlines, key contacts. Use **bold** for: names, numbers, dates, amounts, important terms.",
+  "summary": "Professional, comprehensive 4-6 sentence summary in the contract's language. Include: main parties, key obligations, coverage/benefits, exclusions, important deadlines, key contacts.",
   "keyPoints": {
-    "guarantees": ["**Main Benefit 1**: Description", "**Main Benefit 2**: Description"],
-    "exclusions": ["**Exclusion 1**: Description with impact", "**Exclusion 2**: Description"],
-    "franchise": "**Deductible/Penalty**: €150 per claim or equivalent",
-    "importantDates": ["**Renewal Date**: 31 December annually", "**Payment Deadline**: 15th of each month"],
+    "guarantees": ["Main Benefit 1: Description", "Main Benefit 2: Description"],
+    "exclusions": ["Exclusion 1: Description with impact", "Exclusion 2: Description"],
+    "franchise": "Deductible/Penalty: €150 per claim or equivalent",
+    "importantDates": ["Renewal Date: 31 December annually", "Payment Deadline: 15th of each month"],
     "explainability": [
       {
         "field": "endDate",
@@ -44,24 +44,24 @@ CRITICAL: Your response must be VALID, PARSEABLE JSON only. Do not include markd
     ]
   },
   "keyPeople": [
-    {"name": "**John Smith**", "role": "Policy Holder", "email": "john@example.com", "phone": "+33612345678"},
-    {"name": "**Jane Doe**", "role": "Insurance Agent", "email": "jane@insurer.com", "phone": "+33987654321"}
+    {"name": "John Smith", "role": "Policy Holder", "email": "john@example.com", "phone": "+33612345678"},
+    {"name": "Jane Doe", "role": "Insurance Agent", "email": "jane@insurer.com", "phone": "+33987654321"}
   ],
   "contactInfo": {
-    "name": "**Policy Holder Name**",
+    "name": "Policy Holder Name",
     "email": "holder@email.com",
     "phone": "+33612345678",
     "address": "123 Main Street, City, Postal Code",
     "role": "Insured Person"
   },
   "importantContacts": [
-    {"name": "**Claims Department**", "email": "claims@insurer.com", "phone": "+33800000000"},
-    {"name": "**Customer Service**", "email": "support@insurer.com", "phone": "+33800111111"}
+    {"name": "Claims Department", "email": "claims@insurer.com", "phone": "+33800000000"},
+    {"name": "Customer Service", "email": "support@insurer.com", "phone": "+33800111111"}
   ],
   "relevantDates": [
-    {"date": "2025-12-31", "description": "**Policy Expiration Date**", "type": "EXPIRATION"},
-    {"date": "2025-10-31", "description": "**Renewal Notice Deadline** (60 days before expiration)", "type": "RENEWAL"},
-    {"date": "1970-01-15", "description": "**Monthly Payment Due Date**", "type": "PAYMENT"}
+    {"date": "2025-12-31", "description": "Policy Expiration Date", "type": "EXPIRATION"},
+    {"date": "2025-10-31", "description": "Renewal Notice Deadline (60 days before expiration)", "type": "RENEWAL"},
+    {"date": "1970-01-15", "description": "Monthly Payment Due Date", "type": "PAYMENT"}
   ],
   "extractedText": "Most relevant extracted text, preserving original structure and keywords. Include key clauses, definitions, obligations. Max 12000 chars.",
   "contractValidation": {
@@ -78,18 +78,28 @@ CRITICAL FIELD EXTRACTION RULES:
 
 1. **Language Detection**: Detect and return the contract's primary language (en, fr, de, es, it, pt, etc.). If mixed, return dominant language.
 
+1.1 **Multi-language accuracy**:
+  - Preserve original character set (accents, Arabic script, umlauts, symbols) exactly in extractedText and sourceSnippet.
+  - Correctly parse dates in local formats (e.g., French, German, Spanish, Arabic locales) and normalize to YYYY-MM-DD.
+  - Correctly parse localized numbers (e.g., 1.234,56 and 1,234.56) before setting premium.
+
+1.2 **Premium extraction priority**:
+  - Detect premium/amount clauses using nearby context words (premium, cotisation, prime, mensualite, annual, per claim, deductible).
+  - If multiple amounts exist, choose the one most clearly representing contract premium/payment obligation.
+  - If only percentage-based premium exists, set premium to null and mention the percentage in summary/keyPoints.
+  - premiumCurrency must reflect the contract currency exactly (ISO code if inferable).
+
 2. **Summary (VERY IMPORTANT)**:
    - Write 4-6 comprehensive sentences covering: parties involved, contract scope, key obligations, main coverage/benefits, critical exclusions, important deadlines
-   - Use **Party Name** for persons/entities mentioned
-   - Use **number** for all quantities, dates, amounts, percentages
-   - Use **YYYY-MM-DD** format for dates with **bold**
+  - Use plain text only (no markdown, no bold markers)
+  - Use YYYY-MM-DD format for explicit date mentions where possible
    - Language: Professional business French, English, or contract's native language
    - MUST be detailed enough that reader understands contract without opening PDF
 
 3. **Key People Extraction**:
    - Extract all named individuals: policy holders, insured parties, beneficiaries, signatories, agents, brokers
    - Include roles, contact methods when visible in contract
-   - Use **bold** for names: {"name": "**John Smith**", ...}
+  - Use plain text only for names and labels
 
 4. **Contact Information**:
    - contactInfo: Details of PRIMARY policy holder or contract party
@@ -99,17 +109,17 @@ CRITICAL FIELD EXTRACTION RULES:
    - Extract ALL dates with business meaning: expiration, renewal, payment due dates, review dates
    - For recurring dates (monthly, annually): show pattern like "1970-01-15" for "15th of each month"
    - Include type: EXPIRATION, RENEWAL, PAYMENT, REVIEW, or OTHER
-   - Each date must have clear **bold** description explaining its significance
+  - Each date must have a clear description explaining its significance
 
 6. **Key Points**:
-   - Use **bold** for: benefit names, exclusion types, monetary amounts, coverage limits
-   - Example: "**Motor Coverage**: Collision and theft protection up to **€50,000**"
+  - Use concise plain text labels and include monetary amounts/limits when available
+  - Example: "Motor Coverage: Collision and theft protection up to €50,000"
    - Make exclusions explicit and impactful
-   - Include franchise/deductible with bold currency and amount
+  - Include franchise/deductible with currency and amount when available
 
 7. **Guarantees & Exclusions**:
-   - Be specific: "**Theft Coverage** includes keys, GPS, and aftermarket electronics"
-   - For exclusions, explain impact: "**Mechanical wear excluded** - means breakdowns in years 3+ not covered"
+  - Be specific: "Theft Coverage includes keys, GPS, and aftermarket electronics"
+  - For exclusions, explain impact: "Mechanical wear excluded - means breakdowns in years 3+ not covered"
 
 8. **Email/Phone Extraction**: If present in contract, extract:
    - Email addresses in format: contact@domain.com
@@ -127,6 +137,7 @@ CRITICAL FIELD EXTRACTION RULES:
      - sourceHints.confidence: 0..100 confidence for that field extraction
    - Keep sourceSnippet short (max 280 chars) but sufficiently specific to audit.
    - Never invent snippet text not present in document.
+  - Prefer one snippet from each major section when available (header, financial clause, dates/terms, exclusions).
 
 Field Type Rules:
 - dates: ISO format YYYY-MM-DD or null. For recurring patterns, use canonical date (e.g., "0000-01-15" for "15th each month")

@@ -47,12 +47,15 @@ export async function saveContract(data: {
         status: contract.status,
       },
     };
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
     console.error("❌ SAVE CONTRACT ERROR");
     console.error("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
     console.error(error);
-    return { success: false, error: error.message };
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Unknown error",
+    };
   }
 }
 
@@ -248,6 +251,11 @@ export class ContractService {
             email: true,
           },
         },
+        _count: {
+          select: {
+            ragChunks: true,
+          },
+        },
       },
     });
   }
@@ -324,6 +332,38 @@ export class ContractService {
     return await prisma.contract.delete({
       where: { id },
     });
+  }
+
+  static async deleteAllForUser(userId: string): Promise<number> {
+    const contracts = await prisma.contract.findMany({
+      where: { userId },
+      select: {
+        id: true,
+        fileUrl: true,
+      },
+    });
+
+    if (contracts.length === 0) {
+      return 0;
+    }
+
+    const fileKeys = contracts
+      .map((contract) => this.extractFileKeyFromUrl(contract.fileUrl))
+      .filter((value): value is string => Boolean(value));
+
+    if (fileKeys.length > 0) {
+      try {
+        await utapi.deleteFiles(fileKeys);
+      } catch (error) {
+        console.error("Failed to bulk delete files from UploadThing:", error);
+      }
+    }
+
+    const deleted = await prisma.contract.deleteMany({
+      where: { userId },
+    });
+
+    return deleted.count;
   }
 
   // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

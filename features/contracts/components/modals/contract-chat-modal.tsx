@@ -1,8 +1,22 @@
 "use client";
 
 import { useState } from "react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { MessageSquare, Briefcase, Scale, Bot, User, Loader2, Send } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  MessageSquare,
+  Briefcase,
+  Scale,
+  Bot,
+  User,
+  Loader2,
+  Send,
+  Network,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { askContractQuestionAction } from "@/features/contracts/api/contract.action";
@@ -15,6 +29,12 @@ interface Contract {
 interface ChatMessage {
   role: "user" | "assistant";
   content: string;
+}
+
+interface RagDiagnosticEntry {
+  chunkIndex: number;
+  score: number;
+  preview: string;
 }
 
 interface ContractChatModalProps {
@@ -32,10 +52,14 @@ export function ContractChatModal({
 }: ContractChatModalProps) {
   const [question, setQuestion] = useState("");
   const [isAsking, setIsAsking] = useState(false);
+  const [ragDiagnostics, setRagDiagnostics] = useState<RagDiagnosticEntry[]>(
+    [],
+  );
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       role: "assistant",
-      content: "Ask me anything about this contract. I will answer based on the file analysis.",
+      content:
+        "Ask me anything about this contract. I will answer based on the file analysis.",
     },
   ]);
 
@@ -51,22 +75,45 @@ export function ContractChatModal({
     const trimmedQuestion = question.trim();
     if (!trimmedQuestion) return;
 
-    setMessages((prev) => [...prev, { role: "user", content: trimmedQuestion }]);
+    setMessages((prev) => [
+      ...prev,
+      { role: "user", content: trimmedQuestion },
+    ]);
     setQuestion("");
     setIsAsking(true);
 
     try {
-      const result = await askContractQuestionAction(contract.id, trimmedQuestion);
+      const result = await askContractQuestionAction(
+        contract.id,
+        trimmedQuestion,
+      );
 
       if (result.success && result.answer) {
-        setMessages((prev) => [...prev, { role: "assistant", content: result.answer as string }]);
+        const diagnostics = Array.isArray(
+          (result as { ragDiagnostics?: RagDiagnosticEntry[] }).ragDiagnostics,
+        )
+          ? ((result as { ragDiagnostics?: RagDiagnosticEntry[] })
+              .ragDiagnostics ?? [])
+          : [];
+        setRagDiagnostics(diagnostics);
+        setMessages((prev) => [
+          ...prev,
+          { role: "assistant", content: result.answer as string },
+        ]);
       } else {
         const errorMessage = result.error || "Failed to get AI response";
-        setMessages((prev) => [...prev, { role: "assistant", content: `Error: ${errorMessage}` }]);
+        setMessages((prev) => [
+          ...prev,
+          { role: "assistant", content: `Error: ${errorMessage}` },
+        ]);
       }
     } catch (error) {
-      const fallbackMessage = error instanceof Error ? error.message : "Unknown error occurred";
-      setMessages((prev) => [...prev, { role: "assistant", content: `Error: ${fallbackMessage}` }]);
+      const fallbackMessage =
+        error instanceof Error ? error.message : "Unknown error occurred";
+      setMessages((prev) => [
+        ...prev,
+        { role: "assistant", content: `Error: ${fallbackMessage}` },
+      ]);
     } finally {
       setIsAsking(false);
     }
@@ -90,7 +137,9 @@ export function ContractChatModal({
                   <p className="text-xs uppercase tracking-[0.14em] text-muted-foreground">
                     Contract Intelligence Assistant
                   </p>
-                  <p className="text-sm font-medium truncate mt-1">{contract.fileName}</p>
+                  <p className="text-sm font-medium truncate mt-1">
+                    {contract.fileName}
+                  </p>
                 </div>
                 <div className="flex items-center gap-2 text-xs">
                   <span className="inline-flex items-center gap-1 rounded-full border border-border/70 bg-muted/30 px-2 py-1">
@@ -124,6 +173,43 @@ export function ContractChatModal({
               </div>
             </div>
 
+            <div className="rounded-2xl border border-cyan-500/20 bg-cyan-500/5 p-3">
+              <div className="mb-2 flex items-center gap-2">
+                <Network className="h-4 w-4 text-cyan-600 dark:text-cyan-300" />
+                <p className="text-xs font-semibold uppercase tracking-wide text-cyan-700 dark:text-cyan-300">
+                  RAG Diagnostics
+                </p>
+              </div>
+
+              {ragDiagnostics.length === 0 ? (
+                <p className="text-xs text-muted-foreground">
+                  Ask a question to inspect top retrieved chunks and relevance
+                  scores.
+                </p>
+              ) : (
+                <div className="space-y-2">
+                  {ragDiagnostics.map((item) => (
+                    <div
+                      key={`${item.chunkIndex}-${item.score}`}
+                      className="rounded-xl border border-border/50 bg-background/70 p-2"
+                    >
+                      <div className="mb-1 flex items-center justify-between text-[11px]">
+                        <span className="font-medium text-foreground">
+                          Chunk {item.chunkIndex}
+                        </span>
+                        <span className="rounded-full border border-cyan-500/30 bg-cyan-500/10 px-2 py-0.5 text-cyan-700 dark:text-cyan-300">
+                          score {item.score.toFixed(4)}
+                        </span>
+                      </div>
+                      <p className="text-[11px] leading-relaxed text-muted-foreground">
+                        {item.preview}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
             <div className="h-80 space-y-3 overflow-y-auto rounded-2xl border border-white/10 bg-black/5 dark:bg-white/5 p-4 shadow-inner backdrop-blur-md">
               {messages.map((message, index) => (
                 <div
@@ -144,7 +230,10 @@ export function ContractChatModal({
                       }`}
                     >
                       {message.role === "assistant"
-                        ? renderRichParagraphs(message.content, `chat-assistant-${index}`)
+                        ? renderRichParagraphs(
+                            message.content,
+                            `chat-assistant-${index}`,
+                          )
                         : message.content}
                     </div>
                     {message.role === "user" && (
@@ -177,7 +266,12 @@ export function ContractChatModal({
                 disabled={isAsking}
                 className="rounded-2xl border-white/20 dark:border-white/10 bg-background/50 backdrop-blur-md focus:bg-background/80 transition-all duration-300 shadow-inner"
                 onKeyDown={(event) => {
-                  if (event.key === "Enter" && !event.shiftKey && !isAsking && question.trim()) {
+                  if (
+                    event.key === "Enter" &&
+                    !event.shiftKey &&
+                    !isAsking &&
+                    question.trim()
+                  ) {
                     event.preventDefault();
                     void handleAskQuestion();
                   }

@@ -7,21 +7,20 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-
 model User {
-  id        String     @id @default(cuid())
-  clerkId   String     @unique
-  email     String     @unique
+  id        String  @id @default(cuid())
+  clerkId   String  @unique
+  email     String  @unique
   firstName String?
   lastName  String?
   imageUrl  String?
-  
+
   contracts     Contract[]
   notifications Notification[]
-  
-  createdAt DateTime   @default(now())
-  updatedAt DateTime   @updatedAt
-  
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   @@index([clerkId])
   @@index([email])
 }
@@ -30,70 +29,90 @@ model Contract {
   id     String @id @default(cuid())
   userId String
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
+
   // File info (user uploads)
-  fileName   String
-  fileUrl    String
-  fileSize   Int
-  mimeType   String
-  
+  fileName String
+  fileUrl  String
+  fileSize Int
+  mimeType String
+
   // AI-determined fields (filled automatically)
-  title            String?
-  type             ContractType?
-  provider         String?
-  policyNumber     String?
-  startDate        DateTime?
-  endDate          DateTime?
-  premium          Decimal?  @db.Decimal(10, 2)
-  
+  title        String?
+  type         ContractType?
+  provider     String?
+  policyNumber String?
+  startDate    DateTime?
+  endDate      DateTime?
+  premium      Decimal?      @db.Decimal(10, 2)
+
   // Processing pipeline
-  status           ContractStatus @default(UPLOADED)
-  
+  status ContractStatus @default(UPLOADED)
+
   // AI results
-  extractedText    String?        @db.Text
-  summary          String?        @db.Text
-  keyPoints        Json?
-  
+  extractedText String? @db.Text
+  summary       String? @db.Text
+  keyPoints     Json?
+
   // Blockchain (later)
-  documentHash     String?
-  txHash           String?
-  ipfsUrl          String?
-  
+  documentHash String?
+  txHash       String?
+  ipfsUrl      String?
+
   // Notifications for this contract
-  notifications    Notification[]
-  
+  notifications Notification[]
+  ragChunks     ContractRagChunk[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-  
+
   @@index([userId])
   @@index([status])
   @@index([type])
   @@index([endDate])
 }
 
+model ContractRagChunk {
+  id         String   @id @default(cuid())
+  contractId String
+  contract   Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+
+  chunkIndex  Int
+  content     String
+  contentHash String
+  embedding   Float[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([contractId, chunkIndex])
+  @@index([contractId])
+  @@index([contentHash])
+  @@index([chunkIndex])
+}
+
 model Notification {
-  id        String   @id @default(cuid())
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   contractId String?
   contract   Contract? @relation(fields: [contractId], references: [id], onDelete: SetNull)
-  
+
   // Notification metadata
-  type      NotificationType
-  title     String
-  message   String
-  icon      String?  // Icon type for UI
-  
+  type    NotificationType
+  title   String
+  message String
+  icon    String? // Icon type for UI
+
   // Action metadata
-  actionType String?  // e.g., "RENEWAL_REMINDER", "UPLOAD_SUCCESS", "ANALYSIS_COMPLETE"
-  actionData Json?    // Additional data for the action
-  
+  actionType String? // e.g., "RENEWAL_REMINDER", "UPLOAD_SUCCESS", "ANALYSIS_COMPLETE"
+  actionData Json? // Additional data for the action
+
   // Status tracking
-  read      Boolean  @default(false)
-  createdAt DateTime @default(now())
+  read      Boolean   @default(false)
+  createdAt DateTime  @default(now())
   expiresAt DateTime? // Notification expiration time
-  
+
   @@index([userId])
   @@index([contractId])
   @@index([type])
@@ -102,11 +121,11 @@ model Notification {
 }
 
 enum NotificationType {
-  SUCCESS         // Successful action
-  WARNING         // Warning/Alert
-  ERROR           // Error
-  INFO            // Informational
-  DEADLINE        // Deadline approaching
+  SUCCESS // Successful action
+  WARNING // Warning/Alert
+  ERROR // Error
+  INFO // Informational
+  DEADLINE // Deadline approaching
 }
 
 enum ContractType {
@@ -121,10 +140,8 @@ enum ContractType {
 }
 
 enum ContractStatus {
-  UPLOADED        // Just uploaded, waiting for processing
-  PROCESSING      // AI is analyzing
-  COMPLETED       // Everything done
-  FAILED          // Processing failed
+  UPLOADED // Just uploaded, waiting for processing
+  PROCESSING // AI is analyzing
+  COMPLETED // Everything done
+  FAILED // Processing failed
 }
-
-

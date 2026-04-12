@@ -3,7 +3,7 @@
 import { ContractUploadForm } from "@/features/contracts/components/forms/contract-upload-form";
 import { EmptyContractsState } from "@/features/contracts/components/list/empty-contracts-state";
 import { ContractsList } from "@/features/contracts/components/list/contracts-list";
-import { ContactsHeader } from "@/components/layout/contacts-header";
+import { ContractsHeader } from "@/components/layout/contacts-header";
 import { useState, useEffect } from "react";
 import { getContracts } from "@/features/contracts/api/contract.action";
 import { Card } from "@/components/ui/card";
@@ -67,7 +67,7 @@ export default function ContactsPage() {
     <>
       <div className="min-h-screen bg-background text-foreground">
         <main className="flex flex-col min-h-screen">
-          <ContactsHeader />
+          <ContractsHeader />
 
           <div className="flex-1 overflow-auto">
             <div className="max-w-7xl mx-auto px-6 py-8 space-y-8">

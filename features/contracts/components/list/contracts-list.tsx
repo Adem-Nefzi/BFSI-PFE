@@ -2,24 +2,21 @@
 
 import { useState, useEffect, useCallback, useMemo } from "react";
 import type { ReactNode } from "react";
+import type { Prisma } from "@prisma/client";
 import {
   Download,
   Trash2,
   Eye,
   MoreVertical,
   Loader2,
-  Sparkles,
   FileText,
+  FileSpreadsheet,
   MessageSquare,
-  Send,
-  Scale,
-  Briefcase,
-  User,
-  Bot,
   AlertTriangle,
   X,
   Search,
   Info,
+  Network,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -50,12 +47,12 @@ import {
 import {
   deleteContract,
   getContracts,
-  analyzeContractAction,
-  askContractQuestionAction,
+  deleteAllContractsAction,
 } from "@/features/contracts/api/contract.action";
 import { toast } from "sonner";
 import { ContractChatModal } from "@/features/contracts/components/modals/contract-chat-modal";
 import { ContractProofModal } from "@/features/contracts/components/modals/contract-proof-modal";
+import { stripMarkdown, exportToCSV, exportToPDF } from "@/features/contracts/utils/export.utils";
 
 interface Contract {
   id: string;
@@ -73,13 +70,10 @@ interface Contract {
   endDate?: string | null;
   premium?: number | null;
   summary?: string | null;
-  keyPoints?: Record<string, unknown> | null;
+  keyPoints?: Prisma.JsonValue | null;
   extractedText?: string | null;
-}
-
-interface ChatMessage {
-  role: "user" | "assistant";
-  content: string;
+  ragChunkCount?: number;
+  isRagged?: boolean;
 }
 
 interface ExplainabilityEntry {
@@ -93,6 +87,22 @@ interface ExplainabilityEntry {
   };
 }
 
+interface ContractKeyPoints {
+  guarantees?: string[];
+  exclusions?: string[];
+  franchise?: string | null;
+  importantDates?: string[];
+  explainability?: ExplainabilityEntry[];
+  aiMeta?: {
+    language?: string | null;
+    premiumCurrency?: string | null;
+  };
+}
+
+const isContractKeyPoints = (value: unknown): value is ContractKeyPoints => {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+};
+
 export function ContractsList({ refreshTrigger }: { refreshTrigger?: number }) {
   const emitNotificationRefresh = () => {
     window.dispatchEvent(new Event("notifications:refresh"));
@@ -104,18 +114,18 @@ export function ContractsList({ refreshTrigger }: { refreshTrigger?: number }) {
   const [contracts, setContracts] = useState<Contract[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [analyzingId, setAnalyzingId] = useState<string | null>(null);
+  const [isDeletingAll, setIsDeletingAll] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [selectedContract, setSelectedContract] = useState<Contract | null>(
     null,
   );
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [askOpen, setAskOpen] = useState(false);
   const [chatContract, setChatContract] = useState<Contract | null>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [contractToDelete, setContractToDelete] = useState<Contract | null>(
     null,
   );
+  const [deleteAllDialogOpen, setDeleteAllDialogOpen] = useState(false);
   const [invalidContractDialogOpen, setInvalidContractDialogOpen] =
     useState(false);
   const [invalidContractReason, setInvalidContractReason] = useState("");
@@ -563,11 +573,13 @@ export function ContractsList({ refreshTrigger }: { refreshTrigger?: number }) {
   const getExplainabilityItems = (
     contract: Contract | null,
   ): ExplainabilityEntry[] => {
-    const raw = (contract?.keyPoints as any)?.explainability;
+    const raw = isContractKeyPoints(contract?.keyPoints)
+      ? contract.keyPoints.explainability
+      : undefined;
     if (!Array.isArray(raw)) return [];
 
     return raw
-      .map((item: any) => ({
+      .map((item) => ({
         field: String(item?.field ?? "").trim(),
         why: String(item?.why ?? "").trim(),
         sourceSnippet: String(item?.sourceSnippet ?? "").trim(),
@@ -675,7 +687,9 @@ export function ContractsList({ refreshTrigger }: { refreshTrigger?: number }) {
     if (!contract) return null;
 
     const fromMeta = String(
-      (contract.keyPoints as any)?.aiMeta?.premiumCurrency ?? "",
+      (isContractKeyPoints(contract.keyPoints)
+        ? contract.keyPoints.aiMeta?.premiumCurrency
+        : null) ?? "",
     ).trim();
     if (fromMeta) return fromMeta;
 
@@ -848,38 +862,26 @@ export function ContractsList({ refreshTrigger }: { refreshTrigger?: number }) {
     setContractToDelete(null);
   };
 
-  const handleAnalyze = async (id: string) => {
-    const selected = contracts.find((contract) => contract.id === id);
-    setAnalyzingId(id);
-    setIsAnalyzing(true);
+  const handleDeleteAll = async () => {
+    setIsDeletingAll(true);
     try {
-      const result = await analyzeContractAction(id);
+      const result = await deleteAllContractsAction();
       if (result.success) {
-        // Reload contracts to get all AI analysis data
-        await loadContracts();
-        toast.success("Contract analyzed successfully!");
+        setContracts([]);
+        toast.success(
+          `Deleted ${result.deletedCount ?? 0} contract${(result.deletedCount ?? 0) === 1 ? "" : "s"}.`,
+        );
         emitNotificationRefresh();
       } else {
-        const errorCode = (result as { errorCode?: string }).errorCode;
-        if (errorCode === "INVALID_CONTRACT") {
-          const reason =
-            result.error ||
-            "This uploaded file is not recognized as a valid contract.";
-          setInvalidContractReason(reason);
-          setInvalidContractFileName(selected?.fileName || "Unknown file");
-          setInvalidContractDialogOpen(true);
-          toast.error("Invalid contract file detected");
-        } else {
-          toast.error(result.error || "Failed to analyze contract");
-        }
+        toast.error(result.error || "Failed to delete all contracts");
       }
     } catch (error) {
       toast.error(
         error instanceof Error ? error.message : "Unknown error occurred",
       );
     } finally {
-      setAnalyzingId(null);
-      setIsAnalyzing(false);
+      setIsDeletingAll(false);
+      setDeleteAllDialogOpen(false);
     }
   };
 
@@ -994,11 +996,28 @@ export function ContractsList({ refreshTrigger }: { refreshTrigger?: number }) {
             className="pl-9"
           />
         </div>
-        {debouncedSearchQuery && (
-          <p className="text-xs text-muted-foreground">
-            Showing results for: "{debouncedSearchQuery}"
-          </p>
-        )}
+        <div className="flex items-center gap-2">
+          {debouncedSearchQuery && (
+            <p className="text-xs text-muted-foreground">
+              Showing results for: &quot;{debouncedSearchQuery}&quot;
+            </p>
+          )}
+          <Button
+            type="button"
+            variant="destructive"
+            size="sm"
+            disabled={contracts.length === 0 || isDeletingAll}
+            onClick={() => setDeleteAllDialogOpen(true)}
+            className="gap-2"
+          >
+            {isDeletingAll ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Trash2 className="h-4 w-4" />
+            )}
+            Delete All
+          </Button>
+        </div>
       </div>
 
       <Card className="border-border/50 overflow-hidden">
@@ -1023,6 +1042,12 @@ export function ContractsList({ refreshTrigger }: { refreshTrigger?: number }) {
                     >
                       {contract.status}
                     </span>
+                    {contract.isRagged && (
+                      <span className="inline-flex items-center gap-1 rounded-full border border-cyan-500/30 bg-cyan-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-cyan-700 dark:text-cyan-300">
+                        <Network className="h-3 w-3" />
+                        RAG {contract.ragChunkCount ?? 0}
+                      </span>
+                    )}
                   </div>
 
                   <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground flex-wrap">
@@ -1070,21 +1095,6 @@ export function ContractsList({ refreshTrigger }: { refreshTrigger?: number }) {
                   <Download className="w-4 h-4" />
                 </Button>
 
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="hover:bg-primary/10"
-                  title="Analyze with AI"
-                  disabled={analyzingId === contract.id}
-                  onClick={() => handleAnalyze(contract.id)}
-                >
-                  {analyzingId === contract.id ? (
-                    <Loader2 className="w-4 h-4 animate-spin text-primary" />
-                  ) : (
-                    <Sparkles className="w-4 h-4" />
-                  )}
-                </Button>
-
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button
@@ -1109,6 +1119,20 @@ export function ContractsList({ refreshTrigger }: { refreshTrigger?: number }) {
                     >
                       <FileText className="w-4 h-4 mr-2" />
                       Details
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onClick={() => exportToPDF(contract as any)}
+                      className="cursor-pointer"
+                    >
+                      <FileText className="w-4 h-4 mr-2" />
+                      Export Analysis (PDF)
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onClick={() => exportToCSV(contract as any)}
+                      className="cursor-pointer"
+                    >
+                      <FileSpreadsheet className="w-4 h-4 mr-2" />
+                      Export Analysis (CSV)
                     </DropdownMenuItem>
                     <DropdownMenuItem
                       onClick={() => requestDeleteContract(contract)}
@@ -1238,7 +1262,7 @@ export function ContractsList({ refreshTrigger }: { refreshTrigger?: number }) {
                           </button>
                         </div>
                         <p className="mt-2 min-h-[62px] rounded-xl border border-white/10 dark:border-white/5 bg-background/50 px-3 py-2 font-medium text-foreground whitespace-pre-wrap break-words shadow-inner">
-                          {selectedContract.title || "N/A"}
+                          {stripMarkdown(selectedContract.title) || "N/A"}
                         </p>
                       </div>
                       <div className="flex min-h-[120px] flex-col rounded-2xl border border-border/30 bg-muted/20 px-3 py-3 backdrop-blur-md transition-all duration-300 hover:bg-muted/40 hover:shadow-lg hover:-translate-y-1 hover:border-primary/30">
@@ -1259,7 +1283,7 @@ export function ContractsList({ refreshTrigger }: { refreshTrigger?: number }) {
                           </button>
                         </div>
                         <p className="mt-2 min-h-[62px] rounded-xl border border-white/10 dark:border-white/5 bg-background/50 px-3 py-2 font-medium text-foreground whitespace-pre-wrap break-words shadow-inner">
-                          {selectedContract.provider || "N/A"}
+                          {stripMarkdown(selectedContract.provider) || "N/A"}
                         </p>
                       </div>
                       <div className="flex min-h-[120px] flex-col rounded-2xl border border-border/30 bg-muted/20 px-3 py-3 backdrop-blur-md transition-all duration-300 hover:bg-muted/40 hover:shadow-lg hover:-translate-y-1 hover:border-primary/30">
@@ -1283,7 +1307,7 @@ export function ContractsList({ refreshTrigger }: { refreshTrigger?: number }) {
                           </button>
                         </div>
                         <p className="mt-2 min-h-[62px] rounded-xl border border-white/10 dark:border-white/5 bg-background/50 px-3 py-2 font-medium text-foreground whitespace-pre-wrap break-words shadow-inner">
-                          {selectedContract.policyNumber || "N/A"}
+                          {stripMarkdown(selectedContract.policyNumber) || "N/A"}
                         </p>
                       </div>
                       <div className="flex min-h-[120px] flex-col rounded-2xl border border-border/30 bg-muted/20 px-3 py-3 backdrop-blur-md transition-all duration-300 hover:bg-muted/40 hover:shadow-lg hover:-translate-y-1 hover:border-primary/30">
@@ -1376,9 +1400,10 @@ export function ContractsList({ refreshTrigger }: { refreshTrigger?: number }) {
                         Key Points
                       </h3>
                       <div className="space-y-3 text-sm">
-                        {(selectedContract.keyPoints as any)?.guarantees &&
+                        {isContractKeyPoints(selectedContract.keyPoints) &&
+                          selectedContract.keyPoints.guarantees &&
                           Array.isArray(
-                            (selectedContract.keyPoints as any).guarantees,
+                            selectedContract.keyPoints.guarantees,
                           ) && (
                             <div>
                               <p className="text-muted-foreground font-medium">
@@ -1386,9 +1411,8 @@ export function ContractsList({ refreshTrigger }: { refreshTrigger?: number }) {
                               </p>
                               <ul className="ml-1 space-y-2">
                                 {(
-                                  (selectedContract.keyPoints as any)
-                                    .guarantees as string[]
-                                ).map((guarantee: string, idx: number) => (
+                                  selectedContract.keyPoints.guarantees ?? []
+                                ).map((guarantee, idx: number) => (
                                   <li
                                     key={idx}
                                     className="rounded-lg border border-border/50 bg-muted/20 px-3 py-2"
@@ -1402,9 +1426,10 @@ export function ContractsList({ refreshTrigger }: { refreshTrigger?: number }) {
                               </ul>
                             </div>
                           )}
-                        {(selectedContract.keyPoints as any)?.exclusions &&
+                        {isContractKeyPoints(selectedContract.keyPoints) &&
+                          selectedContract.keyPoints.exclusions &&
                           Array.isArray(
-                            (selectedContract.keyPoints as any).exclusions,
+                            selectedContract.keyPoints.exclusions,
                           ) && (
                             <div>
                               <p className="text-muted-foreground font-medium">
@@ -1412,9 +1437,8 @@ export function ContractsList({ refreshTrigger }: { refreshTrigger?: number }) {
                               </p>
                               <ul className="ml-1 space-y-2">
                                 {(
-                                  (selectedContract.keyPoints as any)
-                                    .exclusions as string[]
-                                ).map((exclusion: string, idx: number) => (
+                                  selectedContract.keyPoints.exclusions ?? []
+                                ).map((exclusion, idx: number) => (
                                   <li
                                     key={idx}
                                     className="rounded-lg border border-border/50 bg-muted/20 px-3 py-2"
@@ -1428,21 +1452,20 @@ export function ContractsList({ refreshTrigger }: { refreshTrigger?: number }) {
                               </ul>
                             </div>
                           )}
-                        {(selectedContract.keyPoints as any)?.franchise && (
-                          <div>
-                            <p className="text-muted-foreground font-medium">
-                              Deductible:
-                            </p>
-                            <div className="rounded-lg border border-border/50 bg-muted/20 px-3 py-2 whitespace-pre-wrap break-words">
-                              {renderRichParagraphs(
-                                String(
-                                  (selectedContract.keyPoints as any).franchise,
-                                ),
-                                `franchise-${selectedContract.id}`,
-                              )}
+                        {isContractKeyPoints(selectedContract.keyPoints) &&
+                          selectedContract.keyPoints.franchise && (
+                            <div>
+                              <p className="text-muted-foreground font-medium">
+                                Deductible:
+                              </p>
+                              <div className="rounded-lg border border-border/50 bg-muted/20 px-3 py-2 whitespace-pre-wrap break-words">
+                                {renderRichParagraphs(
+                                  String(selectedContract.keyPoints.franchise),
+                                  `franchise-${selectedContract.id}`,
+                                )}
+                              </div>
                             </div>
-                          </div>
-                        )}
+                          )}
                       </div>
                     </div>
                   )}
@@ -1460,9 +1483,9 @@ export function ContractsList({ refreshTrigger }: { refreshTrigger?: number }) {
 
               {selectedContract.status === "UPLOADED" && (
                 <div className="flex items-center gap-2 rounded-xl border border-amber-200/40 bg-amber-50/60 p-4 dark:border-amber-800/40 dark:bg-amber-950/30">
-                  <Sparkles className="w-5 h-5 text-amber-500" />
+                  <Loader2 className="w-5 h-5 text-amber-500 animate-spin" />
                   <p className="text-sm text-amber-700 dark:text-amber-300">
-                    Click the Sparkles button to analyze this contract
+                    Contract uploaded. AI analysis will start automatically.
                   </p>
                 </div>
               )}
@@ -1526,6 +1549,30 @@ export function ContractsList({ refreshTrigger }: { refreshTrigger?: number }) {
         </AlertDialogContent>
       </AlertDialog>
 
+      <AlertDialog
+        open={deleteAllDialogOpen}
+        onOpenChange={setDeleteAllDialogOpen}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete all contracts?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action permanently removes all contracts and related files
+              for your account. This cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => void handleDeleteAll()}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {isDeletingAll ? "Deleting..." : "Delete All"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       <Dialog
         open={invalidContractDialogOpen}
         onOpenChange={setInvalidContractDialogOpen}
@@ -1573,59 +1620,6 @@ export function ContractsList({ refreshTrigger }: { refreshTrigger?: number }) {
           </div>
         </DialogContent>
       </Dialog>
-
-      {/* AI Analysis Loading Overlay */}
-      {isAnalyzing && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 backdrop-blur-sm animate-in fade-in duration-300">
-          <div className="mx-4 max-w-md rounded-3xl border border-border/60 bg-[radial-gradient(circle_at_top_right,hsl(var(--primary)/0.22),transparent_45%),radial-gradient(circle_at_bottom_left,hsl(var(--secondary)/0.16),transparent_45%),hsl(var(--background))] p-8 shadow-2xl md:p-10 zoom-in-95 animate-in duration-300">
-            <div className="flex flex-col items-center text-center space-y-6">
-              {/* Glow Effect */}
-              <div className="relative">
-                <div className="absolute inset-0 rounded-full bg-primary/30 blur-xl animate-pulse"></div>
-                <div className="relative rounded-full bg-gradient-to-br from-primary to-accent p-4">
-                  <Sparkles className="h-8 w-8 animate-pulse text-white" />
-                </div>
-              </div>
-
-              {/* Spinner */}
-              <div className="relative">
-                <Loader2 className="h-11 w-11 animate-spin text-primary" />
-              </div>
-
-              <div className="space-y-2">
-                <h3 className="text-xl font-semibold text-foreground">
-                  Analyzing Contract
-                </h3>
-                <p className="text-sm text-muted-foreground">
-                  Our AI is carefully reviewing your document...
-                </p>
-              </div>
-
-              {/* Progress Section */}
-              <div className="w-full space-y-2">
-                <div className="flex items-center justify-between text-xs text-muted-foreground">
-                  <span>Processing</span>
-                  <span className="flex items-center gap-1.5">
-                    {/* Use inline styles for delays if they aren't in your config */}
-                    <span className="h-1.5 w-1.5 rounded-full bg-primary animate-bounce [animation-delay:-0.3s]"></span>
-                    <span className="h-1.5 w-1.5 rounded-full bg-primary animate-bounce [animation-delay:-0.15s]"></span>
-                    <span className="h-1.5 w-1.5 rounded-full bg-primary animate-bounce"></span>
-                  </span>
-                </div>
-
-                {/* Moving Progress Bar */}
-                <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
-                  <div className="h-full w-full rounded-full bg-gradient-to-r from-primary to-accent animate-progress-loading origin-left"></div>
-                </div>
-              </div>
-
-              <p className="text-xs text-muted-foreground italic">
-                This may take up to 10 seconds
-              </p>
-            </div>
-          </div>
-        </div>
-      )}
     </>
   );
 }
