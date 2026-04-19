@@ -19,12 +19,29 @@ import { keyManager } from "@/lib/services/ai/key-manager";
 
 const PRIMARY_ANALYSIS_MODEL =
   process.env.AI_MODEL_PRIMARY || "gemini-3.1-flash-lite-preview";
+const GEMINI_SECONDARY_ANALYSIS_MODEL =
+  process.env.AI_MODEL_SECONDARY_GEMINI || "";
 const FALLBACK_ANALYSIS_MODEL =
-  process.env.AI_MODEL_FALLBACK || "gemini-2.0-flash";
+  process.env.AI_MODEL_FALLBACK || "llama-3.3-70b-versatile";
+const FALLBACK_REPAIR_MODEL =
+  process.env.AI_MODEL_FALLBACK_REPAIR || "llama-3.3-70b-versatile";
+const GROQ_API_KEY =
+  process.env.GROQ_API_KEY?.trim() || process.env.AI_GROQ_API_KEY?.trim() || "";
+const GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions";
+
+const GEMINI_ANALYSIS_MODELS = Array.from(
+  new Set(
+    [PRIMARY_ANALYSIS_MODEL, GEMINI_SECONDARY_ANALYSIS_MODEL].filter(Boolean),
+  ),
+);
 
 const ANALYSIS_MODELS = Array.from(
-  new Set([PRIMARY_ANALYSIS_MODEL, FALLBACK_ANALYSIS_MODEL]),
+  new Set([...GEMINI_ANALYSIS_MODELS, `groq:${FALLBACK_ANALYSIS_MODEL}`]),
 );
+
+const FORCE_FALLBACK_TEST =
+  process.env.AI_FORCE_FALLBACK_TEST === "1" ||
+  String(process.env.AI_FORCE_FALLBACK_TEST).toLowerCase() === "true";
 
 type ValidationEnvelope = {
   contractValidation?: {
@@ -72,6 +89,21 @@ const isAdaptiveKeyPoints = (
 };
 
 export class AIService {
+  private static isTransientGeminiError(message: string): boolean {
+    const normalized = message.toLowerCase();
+    return (
+      normalized.includes("503") ||
+      normalized.includes("service unavailable") ||
+      normalized.includes("high demand") ||
+      normalized.includes("temporarily unavailable") ||
+      normalized.includes("backend error") ||
+      normalized.includes("internal server error") ||
+      normalized.includes("bad gateway") ||
+      normalized.includes("gateway timeout") ||
+      normalized.includes("deadline exceeded")
+    );
+  }
+
   /**
    * Domain-specific guidance for contract Q&A.
    * This keeps responses focused on what matters most for each contract family.
@@ -116,6 +148,8 @@ export class AIService {
     keyManager.resetKeys();
     try {
       const maxRetries = Math.min(3, Math.max(1, options?.maxRetries ?? 2));
+      const forceFallbackModelTest =
+        options?.forceFallbackModelTest ?? FORCE_FALLBACK_TEST;
 
       // Step 1: Download raw file bytes from storage URL.
       const response = await fetch(fileUrl);
@@ -168,6 +202,7 @@ export class AIService {
           prompt: `${basePrompt}${correctionHint}`,
           base64,
           mimeType,
+          forceFallbackModelTest,
         });
 
         if (!text) {
@@ -247,7 +282,7 @@ export class AIService {
       // Better error messages
       if (errorMessage.includes("API key")) {
         throw new Error(
-          "Invalid or missing Gemini API key. Check AI_API_KEY in your .env file",
+          "Invalid or missing AI API key. Check AI_API_KEY1/2/3 for Gemini and GROQ_API_KEY for Groq fallback.",
         );
       } else if (errorMessage.includes("INVALID_CONTRACT:")) {
         const reason = String(errorMessage)
@@ -255,6 +290,10 @@ export class AIService {
           .trim();
         throw new Error(
           reason || "Uploaded file is not recognized as a valid contract.",
+        );
+      } else if (this.isTransientGeminiError(errorMessage)) {
+        throw new Error(
+          `Gemini is temporarily overloaded for the configured analysis models (${ANALYSIS_MODELS.join(", ")}). The app retried automatically, but both models are still busy. Please try again in a few minutes.`,
         );
       } else if (
         errorMessage.includes("not found") ||
@@ -298,7 +337,7 @@ export class AIService {
         }
       } else if (errorMessage.includes("quota")) {
         throw new Error(
-          "Limit exceeded. Your Gemini API quota may be exhausted. Check your Google Cloud Console for usage details.",
+          "Limit exceeded. Gemini or Groq quota may be exhausted. Check your provider dashboards for usage and limits.",
         );
       } else {
         throw new Error(`Error analyzing contract: ${errorMessage}`);
@@ -350,14 +389,196 @@ export class AIService {
     return parseAiJsonResponse(text);
   }
 
+  private static isGroqConfigured(): boolean {
+    return GROQ_API_KEY.length > 0;
+  }
+
+  private static async generateWithGroq(input: {
+    model?: string;
+    prompt: string;
+    systemPrompt?: string;
+    responseAsJson: boolean;
+    maxOutputTokens: number;
+    temperature?: number;
+    topP?: number;
+  }): Promise<string> {
+    if (!this.isGroqConfigured()) {
+      throw new Error(
+        "Groq fallback is not configured. Set GROQ_API_KEY (or AI_GROQ_API_KEY).",
+      );
+    }
+
+    const modelName = input.model || FALLBACK_ANALYSIS_MODEL;
+
+    // Build messages with system/user role separation for better instruction adherence
+    const messages: Array<{ role: string; content: string }> = [];
+    if (input.systemPrompt) {
+      messages.push({ role: "system", content: input.systemPrompt });
+    }
+    messages.push({ role: "user", content: input.prompt });
+
+    // Use json_object mode (compatible with all models)
+    const responseFormat: Record<string, unknown> | undefined = input.responseAsJson
+      ? { type: "json_object" as const }
+      : undefined;
+
+    const body: Record<string, unknown> = {
+      model: modelName,
+      temperature: input.temperature ?? 0,
+      top_p: input.topP ?? 0.95,
+      max_tokens: input.maxOutputTokens,
+      response_format: responseFormat,
+      messages,
+    };
+
+    const response = await fetch(GROQ_API_URL, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${GROQ_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+    });
+
+    if (!response.ok) {
+      const details = await response.text();
+      throw new Error(
+        `Groq API error ${response.status}: ${details.slice(0, 300)}`,
+      );
+    }
+
+    const json = (await response.json()) as {
+      choices?: Array<{ message?: { content?: string | null } }>;
+    };
+    const text = json.choices?.[0]?.message?.content?.trim() || "";
+
+    if (!text) {
+      throw new Error("Empty response from Groq fallback model.");
+    }
+
+    return text;
+  }
+
+  private static async generateWithGroqModelChain(input: {
+    preferredModel?: string;
+    prompt: string;
+    systemPrompt?: string;
+    responseAsJson: boolean;
+    maxOutputTokens: number;
+    temperature?: number;
+    topP?: number;
+  }): Promise<string> {
+    const candidates = Array.from(
+      new Set(
+        [
+          input.preferredModel,
+          FALLBACK_ANALYSIS_MODEL,
+          "llama-3.3-70b-versatile",
+          "qwen-2.5-32b",
+          "llama-3.1-8b-instant",
+        ].filter(Boolean),
+      ),
+    ) as string[];
+
+    let lastError: unknown = null;
+
+    for (const modelName of candidates) {
+      try {
+        const text = await this.generateWithGroq({
+          model: modelName,
+          prompt: input.prompt,
+          systemPrompt: input.systemPrompt,
+          responseAsJson: input.responseAsJson,
+          maxOutputTokens: input.maxOutputTokens,
+          temperature: input.temperature,
+          topP: input.topP,
+        });
+        if (modelName !== (input.preferredModel || FALLBACK_ANALYSIS_MODEL)) {
+          console.warn(
+            `Groq switched to fallback model ${modelName} after primary fallback model failed.`,
+          );
+        }
+        return text;
+      } catch (error) {
+        lastError = error;
+        console.warn(
+          `Groq model ${modelName} failed. Trying next fallback model.`,
+          error instanceof Error ? error.message : String(error),
+        );
+      }
+    }
+
+    throw lastError instanceof Error
+      ? lastError
+      : new Error("All Groq fallback models failed.");
+  }
+
+  /**
+   * Build a Groq-optimized system prompt that mirrors the Gemini behavior.
+   * This separates role & formatting rules from user content for better
+   * instruction adherence on open-source models.
+   */
+  private static buildGroqSystemPrompt(): string {
+    return `You are an expert contract analysis engine for the BFSI (Banking, Financial Services, and Insurance) sector.
+You receive the full text content of a contract document below and must extract structured information from it.
+
+CRITICAL OUTPUT RULES:
+1. Return ONLY valid, parseable JSON — no markdown, no backticks, no explanations, no commentary.
+2. Your JSON must conform EXACTLY to the schema specified in the user prompt.
+3. Every required field MUST be present. Use null for missing strings/numbers and [] for missing arrays.
+4. All dates MUST be in ISO YYYY-MM-DD format or null.
+5. The "premium" field must be a positive number or null — NO currency symbols.
+6. The "type" field MUST be one of: INSURANCE_AUTO, INSURANCE_HOME, INSURANCE_HEALTH, INSURANCE_LIFE, LOAN, CREDIT_CARD, INVESTMENT, OTHER.
+7. Do NOT hallucinate or invent data that is not present in the document.
+8. Preserve original language in extractedText and sourceSnippet fields (accents, special characters).
+9. The "summary" must be 4-6 professional sentences covering parties, obligations, coverage, exclusions, and deadlines.
+10. The "extractedText" must contain at least 30 characters of actual document content.
+11. The "keyPoints.explainability" array must have at least 4 items for critical fields when data is available.
+12. contractValidation.confidence must reflect actual extraction certainty (0-100).
+13. When uncertain about a value, use null and set a lower confidence — never guess.
+14. Parse localized number formats correctly (e.g., 1.234,56 vs 1,234.56).
+15. Detect the contract language and set the "language" field accordingly (ISO 639-1).
+
+You are replacing a more capable multimodal model (Gemini) as a fallback. Your output quality MUST match production standards.`;
+  }
+
   private static async generateAnalysisWithFallback(input: {
     prompt: string;
     base64: string;
     mimeType: string;
+    forceFallbackModelTest?: boolean;
   }): Promise<string> {
     let lastError: unknown = null;
+    const forceFallback = Boolean(input.forceFallbackModelTest);
 
-    for (const modelName of ANALYSIS_MODELS) {
+    const buildGroundedGroqPrompt = async (basePrompt: string) => {
+      const groundingText = await this.extractGroqGroundingText({
+        base64: input.base64,
+        mimeType: input.mimeType,
+      });
+
+      if (!groundingText) {
+        return `${basePrompt}\n\nGROQ FALLBACK RULES:\n- You do not have direct binary file access in this fallback path.\n- Do not hallucinate values; use null/empty arrays when data is missing.\n- Keep contractValidation conservative when uncertain.\n- Set contractValidation.confidence to at most 60 when no grounding text is available.`;
+      }
+
+      return `${basePrompt}\n\n--- BEGIN GROUNDED DOCUMENT TEXT (AUTHORITATIVE SOURCE) ---\n${groundingText}\n--- END GROUNDED DOCUMENT TEXT ---\n\nGROQ FALLBACK RULES:\n- Extract fields ONLY from the grounded document text above. This text is the full contract content.\n- Do not invent, assume, or hallucinate any values not explicitly present in the above text.\n- If a field's data is not found in the text, use null (for strings/numbers) or [] (for arrays).\n- Dates: convert any date format found in the text to YYYY-MM-DD.\n- Numbers: parse localized formats (comma vs period) correctly before setting numeric fields.\n- contractValidation.confidence should reflect how much data you could extract from the text.`;
+    };
+
+    if (forceFallback) {
+      console.warn(
+        `🧪 Fallback test mode enabled. Skipping Gemini and forcing Groq model ${FALLBACK_ANALYSIS_MODEL}.`,
+      );
+      const groundedPrompt = await buildGroundedGroqPrompt(input.prompt);
+      return this.generateWithGroqModelChain({
+        preferredModel: FALLBACK_ANALYSIS_MODEL,
+        systemPrompt: this.buildGroqSystemPrompt(),
+        prompt: `${groundedPrompt}\n\nTEST MODE: You are the forced fallback model. Return ONLY valid JSON and preserve the required schema exactly.`,
+        responseAsJson: true,
+        maxOutputTokens: 8192,
+      });
+    }
+
+    for (const modelName of GEMINI_ANALYSIS_MODELS) {
       try {
         return await keyManager.execute(async (genAI) => {
           const model = genAI.getGenerativeModel({
@@ -437,9 +658,32 @@ export class AIService {
       console.warn("Lenient generation also failed:", error);
     }
 
+    // === Groq fallback path ===
+    console.warn(
+      "All Gemini models exhausted. Activating Groq fallback pipeline...",
+    );
+    try {
+      const groundedPrompt = await buildGroundedGroqPrompt(input.prompt);
+      const groqText = await this.generateWithGroqModelChain({
+        preferredModel: FALLBACK_ANALYSIS_MODEL,
+        systemPrompt: this.buildGroqSystemPrompt(),
+        prompt: `${groundedPrompt}\n\nIMPORTANT: Return ONLY valid JSON and preserve the required schema exactly. Do not add any text outside of the JSON object.`,
+        responseAsJson: true,
+        maxOutputTokens: 8192,
+      });
+      console.log(
+        `✅ Analysis fallback with Groq model ${FALLBACK_ANALYSIS_MODEL} succeeded`,
+      );
+      return groqText;
+    } catch (groqError) {
+      console.warn("Groq analysis fallback failed:", groqError);
+    }
+
     throw lastError instanceof Error
       ? lastError
-      : new Error("All analysis models failed to generate content.");
+      : new Error(
+          "All analysis models (Gemini + Groq fallback) failed to generate content.",
+        );
   }
 
   private static async repairMalformedJson(
@@ -447,47 +691,34 @@ export class AIService {
     parseError: string,
   ): Promise<string | null> {
     try {
-      return await keyManager.execute(async (genAI) => {
-        const repairModelName = FALLBACK_ANALYSIS_MODEL;
-        const model = genAI.getGenerativeModel({
-          model: repairModelName,
-          generationConfig: {
-            temperature: 0,
-            topP: 0.9,
-            topK: 20,
-            maxOutputTokens: 16384,
-            responseMimeType: "application/json",
-          },
-        });
-
-        const expectedSchema = {
-          language: "string|null",
-          title: "string",
-          type: "enum: INSURANCE_AUTO|INSURANCE_HOME|INSURANCE_HEALTH|INSURANCE_LIFE|LOAN|CREDIT_CARD|INVESTMENT|OTHER",
-          provider: "string|null",
-          policyNumber: "string|null",
-          startDate: "YYYY-MM-DD|null",
-          endDate: "YYYY-MM-DD|null",
-          premium: "number|null",
-          premiumCurrency: "string|null (ISO code like EUR/USD/TND or symbol)",
-          summary: "string (min 10 chars)",
-          extractedText: "string (min 30 chars)",
-          keyPoints: {
-            guarantees: "string[]",
-            exclusions: "string[]",
-            franchise: "string|null",
-            importantDates: "string[]",
-            explainability:
-              "[{ field, why, sourceSnippet, sourceHints:{ page|null, section|null, confidence|null } }]",
-          },
-          keyPeople: "[{ name, role|null, email|null, phone|null }]",
-          contactInfo:
-            "{ name|null, email|null, phone|null, address|null, role|null }",
-          importantContacts:
-            "[{ name|null, email|null, phone|null, address|null, role|null }]",
-          relevantDates:
-            "[{ date:'YYYY-MM-DD', description, type:'EXPIRATION|RENEWAL|PAYMENT|REVIEW|OTHER' }]",
-          contractValidation: {
+      const expectedSchema = {
+        language: "string|null",
+        title: "string",
+        type: "enum: INSURANCE_AUTO|INSURANCE_HOME|INSURANCE_HEALTH|INSURANCE_LIFE|LOAN|CREDIT_CARD|INVESTMENT|OTHER",
+        provider: "string|null",
+        policyNumber: "string|null",
+        startDate: "YYYY-MM-DD|null",
+        endDate: "YYYY-MM-DD|null",
+        premium: "number|null",
+        premiumCurrency: "string|null (ISO code like EUR/USD/TND or symbol)",
+        summary: "string (min 10 chars)",
+        extractedText: "string (min 30 chars)",
+        keyPoints: {
+          guarantees: "string[]",
+          exclusions: "string[]",
+          franchise: "string|null",
+          importantDates: "string[]",
+          explainability:
+            "[{ field, why, sourceSnippet, sourceHints:{ page|null, section|null, confidence|null } }]",
+        },
+        keyPeople: "[{ name, role|null, email|null, phone|null }]",
+        contactInfo:
+          "{ name|null, email|null, phone|null, address|null, role|null }",
+        importantContacts:
+          "[{ name|null, email|null, phone|null, address|null, role|null }]",
+        relevantDates:
+          "[{ date:'YYYY-MM-DD', description, type:'EXPIRATION|RENEWAL|PAYMENT|REVIEW|OTHER' }]",
+        contractValidation: {
           isValidContract: "boolean",
           confidence: "number (0-100)",
           reason: "string|null",
@@ -515,25 +746,125 @@ Original parse error: ${parseError}
 Malformed response to fix:
 ${malformedResponse.slice(0, 14000)}`;
 
-      const repaired = await model.generateContent(repairPrompt);
-      const repairedText = repaired.response.text()?.trim() || "";
+      const repairedText = await this.generateWithGroqModelChain({
+        preferredModel: FALLBACK_REPAIR_MODEL,
+        prompt: repairPrompt,
+        responseAsJson: true,
+        maxOutputTokens: 6144,
+      });
 
       if (repairedText.length === 0) {
         return null;
       }
 
-      // Verify the repaired text is at least JSON-like before returning
       if (!repairedText.includes("{")) {
         return null;
       }
 
+      try {
+        this.parseJsonResponse(repairedText);
+      } catch (firstRepairParseError) {
+        const secondPassPrompt = `${repairPrompt}\n\nSECOND PASS CORRECTION:\nYour previous repaired JSON was still invalid.\nReason: ${firstRepairParseError instanceof Error ? firstRepairParseError.message : "Invalid JSON"}.\nReturn ONLY strict valid JSON.`;
+
+        const secondPass = await this.generateWithGroqModelChain({
+          preferredModel: FALLBACK_REPAIR_MODEL,
+          prompt: secondPassPrompt,
+          responseAsJson: true,
+          maxOutputTokens: 6144,
+        });
+
+        this.parseJsonResponse(secondPass);
+        return secondPass;
+      }
+
       return repairedText;
-      });
     } catch (error: any) {
       if (error.message?.includes("CRITICAL_KEY_EXHAUSTION")) throw error;
       console.warn("JSON repair step failed:", error);
       return null;
     }
+  }
+
+  private static async extractGroqGroundingText(input: {
+    base64: string;
+    mimeType: string;
+  }): Promise<string> {
+    // For PDFs: extract text directly using pdf-parse
+    if (input.mimeType === "application/pdf") {
+      try {
+        const pdfBuffer = Buffer.from(input.base64, "base64");
+        const { PDFParse } = await import("pdf-parse");
+        const parser = new PDFParse({ data: pdfBuffer });
+        let parsed: { text?: string };
+        try {
+          parsed = await parser.getText();
+        } finally {
+          await parser.destroy();
+        }
+
+        const text = (parsed?.text || "")
+          .replace(/\r/g, "\n")
+          .replace(/\n{3,}/g, "\n\n")
+          .trim();
+
+        if (text && text.length > 50) {
+          console.log(
+            `📄 Groq grounding: extracted ${text.length} chars from PDF`,
+          );
+          return text.slice(0, 50000);
+        }
+      } catch (error) {
+        console.warn(
+          "PDF grounding extraction failed for Groq fallback.",
+          error,
+        );
+      }
+    }
+
+    // For images: try to extract text using Gemini OCR as grounding bridge.
+    // This gives Groq the text content it needs since it can't read images.
+    if (input.mimeType.startsWith("image/")) {
+      try {
+        const ocrText = await keyManager.execute(async (genAI) => {
+          const model = genAI.getGenerativeModel({
+            model: PRIMARY_ANALYSIS_MODEL,
+            generationConfig: {
+              temperature: 0,
+              maxOutputTokens: 8192,
+            },
+          });
+
+          const result = await model.generateContent([
+            "Extract ALL text from this document image exactly as it appears. Preserve structure, formatting, and all content. Return ONLY the raw text, no JSON, no commentary.",
+            {
+              inlineData: {
+                data: input.base64,
+                mimeType: input.mimeType,
+              },
+            },
+          ]);
+
+          return result.response.text()?.trim() || "";
+        });
+
+        if (ocrText && ocrText.length > 50) {
+          console.log(
+            `🖼️ Groq grounding: extracted ${ocrText.length} chars from image via Gemini OCR bridge`,
+          );
+          return ocrText.slice(0, 50000);
+        }
+      } catch (error: any) {
+        // Gemini OCR bridge failed (likely key exhaustion), continue without
+        if (!error.message?.includes("CRITICAL_KEY_EXHAUSTION")) {
+          console.warn(
+            "Image grounding via Gemini OCR failed for Groq fallback; continuing without grounded text.",
+            error,
+          );
+        }
+      }
+    }
+
+    return "";
   }
 
   /**
@@ -641,7 +972,7 @@ ${malformedResponse.slice(0, 14000)}`;
   }): Promise<string> {
     let lastError: unknown = null;
 
-    for (const modelName of ANALYSIS_MODELS) {
+    for (const modelName of GEMINI_ANALYSIS_MODELS) {
       try {
         return await keyManager.execute(async (genAI) => {
           const model = genAI.getGenerativeModel({
@@ -1036,7 +1367,7 @@ Include one short disclaimer only when legal context is discussed: "This is gene
       let rawAnswer = "";
       let lastError: unknown = null;
 
-      for (const modelName of ANALYSIS_MODELS) {
+      for (const modelName of GEMINI_ANALYSIS_MODELS) {
         try {
           rawAnswer = await keyManager.execute(async (genAI) => {
             const model = genAI.getGenerativeModel({
@@ -1074,6 +1405,25 @@ Include one short disclaimer only when legal context is discussed: "This is gene
       }
 
       if (!rawAnswer) {
+        try {
+          rawAnswer = await this.generateWithGroqModelChain({
+            preferredModel: FALLBACK_ANALYSIS_MODEL,
+            systemPrompt: `You are a senior BFSI contract advisor. Answer questions about contracts accurately and professionally. Respond entirely in ${languageName}. Use plain text only — no markdown, no bold, no headers, no bullet points. Base your answers ONLY on the provided contract content. If information is missing, say so.`,
+            prompt,
+            responseAsJson: false,
+            maxOutputTokens: 2048,
+            temperature: 0.2,
+            topP: 0.95,
+          });
+          console.log(
+            `✅ Q&A fallback with Groq model ${FALLBACK_ANALYSIS_MODEL} succeeded in ${languageName}`,
+          );
+        } catch (groqError) {
+          lastError = groqError;
+        }
+      }
+
+      if (!rawAnswer) {
         if (lastError instanceof Error) {
           throw lastError;
         }
@@ -1094,7 +1444,12 @@ Include one short disclaimer only when legal context is discussed: "This is gene
       const errorMessage =
         error instanceof Error ? error.message : String(error);
       if (errorMessage.includes("API key")) {
-        throw new Error("Invalid or missing Gemini API key.");
+        throw new Error("Invalid or missing AI API key (Gemini/Groq).");
+      }
+      if (this.isTransientGeminiError(errorMessage)) {
+        throw new Error(
+          `Gemini is temporarily overloaded for the configured Q&A models (${ANALYSIS_MODELS.join(", ")}). Please try again in a few minutes.`,
+        );
       }
       throw new Error(`Error answering question: ${errorMessage}`);
     }

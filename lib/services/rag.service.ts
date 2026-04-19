@@ -15,20 +15,14 @@ type RetrievedChunk = {
   score: number;
 };
 
-const API_KEY =
-  process.env.AI_API_KEY1 || process.env.AI_API_KEY2 || process.env.AI_API_KEY3;
-
-if (!API_KEY) {
-  throw new Error("AI_API_KEY is not configured");
-}
+import { keyManager } from "@/lib/services/ai/key-manager";
 
 const EMBEDDING_MODEL = process.env.AI_EMBEDDING_MODEL || "text-embedding-004";
 const EMBEDDING_MODEL_FALLBACKS = [
   EMBEDDING_MODEL,
+  "gemini-embedding-001",
   "text-embedding-004",
-  "embedding-001",
 ];
-const genAI = new GoogleGenerativeAI(API_KEY);
 
 export class RAGService {
   private static readonly MAX_CHUNK_CHARS = 1400;
@@ -236,14 +230,18 @@ export class RAGService {
 
     for (const modelName of Array.from(new Set(EMBEDDING_MODEL_FALLBACKS))) {
       try {
-        const model = genAI.getGenerativeModel({ model: modelName });
-        const result = await model.embedContent(text);
-        const values = result.embedding?.values;
+        return await keyManager.execute(async (genAI) => {
+          const model = genAI.getGenerativeModel({ model: modelName });
+          const result = await model.embedContent(text);
+          const values = result.embedding?.values;
 
-        if (values && Array.isArray(values) && values.length > 0) {
-          return values;
-        }
-      } catch (error) {
+          if (values && Array.isArray(values) && values.length > 0) {
+            return values;
+          }
+          throw new Error("Empty embedding");
+        });
+      } catch (error: any) {
+        if (error.message?.includes("CRITICAL_KEY_EXHAUSTION")) throw error;
         lastError = error;
       }
     }

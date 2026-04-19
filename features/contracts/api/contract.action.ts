@@ -428,10 +428,15 @@ export async function analyzeContractAction(id: string) {
     });
 
     // Analyze with AI
+    const forceFallbackModelTest =
+      process.env.AI_FORCE_FALLBACK_TEST === "1" ||
+      String(process.env.AI_FORCE_FALLBACK_TEST).toLowerCase() === "true";
+
     const aiResults = await AIService.analyzeContract(contract.fileUrl, {
       userId: contract.userId,
       fileName: contract.fileName,
       maxRetries: 3,
+      forceFallbackModelTest,
     });
 
     // Validate results

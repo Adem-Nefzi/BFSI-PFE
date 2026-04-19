@@ -52,7 +52,11 @@ import {
 import { toast } from "sonner";
 import { ContractChatModal } from "@/features/contracts/components/modals/contract-chat-modal";
 import { ContractProofModal } from "@/features/contracts/components/modals/contract-proof-modal";
-import { stripMarkdown, exportToCSV, exportToPDF } from "@/features/contracts/utils/export.utils";
+import {
+  stripMarkdown,
+  exportToCSV,
+  exportToPDF,
+} from "@/features/contracts/utils/export.utils";
 
 interface Contract {
   id: string;
@@ -1080,12 +1084,12 @@ export function ContractsList({ refreshTrigger }: { refreshTrigger?: number }) {
                   title="Download contract"
                   onClick={() => {
                     if (contract.fileUrl) {
-                      const downloadUrl = contract.fileUrl + "?download=1";
-
                       const link = document.createElement("a");
-                      link.href = downloadUrl;
+                      link.href = contract.fileUrl;
                       link.download =
                         contract.fileUrl.split("/").pop() || "contract";
+                      link.target = "_blank";
+                      link.rel = "noopener noreferrer";
                       document.body.appendChild(link);
                       link.click();
                       document.body.removeChild(link);
@@ -1307,7 +1311,8 @@ export function ContractsList({ refreshTrigger }: { refreshTrigger?: number }) {
                           </button>
                         </div>
                         <p className="mt-2 min-h-[62px] rounded-xl border border-white/10 dark:border-white/5 bg-background/50 px-3 py-2 font-medium text-foreground whitespace-pre-wrap break-words shadow-inner">
-                          {stripMarkdown(selectedContract.policyNumber) || "N/A"}
+                          {stripMarkdown(selectedContract.policyNumber) ||
+                            "N/A"}
                         </p>
                       </div>
                       <div className="flex min-h-[120px] flex-col rounded-2xl border border-border/30 bg-muted/20 px-3 py-3 backdrop-blur-md transition-all duration-300 hover:bg-muted/40 hover:shadow-lg hover:-translate-y-1 hover:border-primary/30">

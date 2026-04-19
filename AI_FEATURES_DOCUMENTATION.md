@@ -64,14 +64,18 @@ The AI subsystem is centered on:
 ### 2.2 Models
 
 - Primary model: gemini-2.5-flash
-- Fallback model: gemini-2.0-flash
-- Model list is de-duplicated and iterated in order
+- Optional secondary Gemini model: AI_MODEL_SECONDARY_GEMINI
+- Fallback model provider: Groq (default: llama-3.3-70b-versatile)
+- Gemini models are de-duplicated and iterated in order before Groq fallback
+- Groq extraction fallback currently applies to image inputs in this pipeline; JSON repair and Q&A fallback are text-based
 
 ### 2.3 Environment Variables
 
 - AI_API_KEY (or AI_API_KEY2 / AI_API_KEY3 fallback)
 - AI_MODEL_PRIMARY (optional override)
+- AI_MODEL_SECONDARY_GEMINI (optional override)
 - AI_MODEL_FALLBACK (optional override)
+- GROQ_API_KEY (or AI_GROQ_API_KEY)
 
 ## 3. AI Capability Matrix
 
@@ -162,13 +166,13 @@ sequenceDiagram
   autonumber
   participant AIS as AIService
   participant G1 as Gemini Primary
-  participant G2 as Gemini Fallback
+  participant G2 as Gemini Secondary (optional)
 
   AIS->>G1: buildPrevalidationPrompt + inline file
   alt Primary succeeds
     G1-->>AIS: JSON precheck
   else Primary fails
-    AIS->>G2: same precheck request
+    AIS->>G2: same precheck request (if configured)
     G2-->>AIS: JSON precheck
   end
   AIS->>AIS: parse precheck JSON
@@ -201,26 +205,32 @@ sequenceDiagram
   autonumber
   participant AIS as AIService
   participant GP as Gemini Primary
-  participant GF as Gemini Fallback
+  participant GS as Gemini Secondary (optional)
+  participant GR as Groq Fallback
 
   AIS->>GP: generate analysis (strict JSON)
   alt GP success with usable output
     GP-->>AIS: text
   else GP fails
-    AIS->>GF: generate analysis (strict JSON)
-    alt GF success
-      GF-->>AIS: text
-    else GF fails
+    AIS->>GS: generate analysis (strict JSON)
+    alt GS success
+      GS-->>AIS: text
+    else GS fails
       AIS->>GP: lenient generation attempt
-      GP-->>AIS: raw text
+      alt lenient success
+        GP-->>AIS: raw text
+      else lenient fails
+        AIS->>GR: generate analysis (strict JSON)
+        GR-->>AIS: text
+      end
     end
   end
 
   AIS->>AIS: parseJsonResponse
   alt parse failed
-    AIS->>GF: repairMalformedJson(originalText, parseError)
+    AIS->>GR: repairMalformedJson(originalText, parseError)
     alt repair success
-      GF-->>AIS: repaired JSON text
+      GR-->>AIS: repaired JSON text
       AIS->>AIS: parse repaired JSON
     else repair failed
       AIS->>AIS: emergencyExtractFields(rawText)

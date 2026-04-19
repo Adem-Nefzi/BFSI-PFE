@@ -15,6 +15,7 @@ export type AnalyzeOptions = {
   userId?: string;
   fileName?: string;
   maxRetries?: number;
+  forceFallbackModelTest?: boolean;
 };
 
 export type ContactInfo = {

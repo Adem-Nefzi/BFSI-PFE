@@ -293,7 +293,7 @@ export default function DashboardPage() {
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.4 }}
-            className="grid gap-8 xl:grid-cols-[1.45fr,0.95fr] xl:items-end"
+            className="grid gap-8 lg:grid-cols-[1.45fr,0.95fr] lg:items-end"
           >
             <div className="space-y-4">
               <p className="inline-flex items-center gap-2 rounded-full border border-primary/25 bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
@@ -429,7 +429,7 @@ export default function DashboardPage() {
       </div>
 
       <div className="mx-auto max-w-7xl px-6 py-10">
-        <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
+        <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-4">
           <Card className="rounded-2xl border-border/60 bg-card/70 p-6">
             <div className="flex items-center justify-between">
               <p className="text-sm text-muted-foreground">Total Files</p>
@@ -583,7 +583,7 @@ export default function DashboardPage() {
             </span>
           </div>
 
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
             <div className="rounded-xl border border-border/50 bg-muted/25 px-4 py-3">
               <p className="text-xs text-muted-foreground">Completed Samples</p>
               <p className="mt-1 text-2xl font-semibold text-foreground">
@@ -648,9 +648,9 @@ export default function DashboardPage() {
         </Card>
 
         {hasChartData ? (
-          <div className="mt-6 grid grid-cols-1 gap-5 xl:grid-cols-12">
+          <div className="mt-6 grid grid-cols-1 gap-5 lg:grid-cols-12">
             {chartData && chartData.trends.length > 0 && (
-              <Card className="rounded-2xl border-border/60 p-5 xl:col-span-8">
+              <Card className="rounded-2xl border-border/60 p-5 lg:col-span-8">
                 <div className="mb-4 flex items-center gap-2">
                   <BarChart3 className="h-4 w-4 text-primary" />
                   <h2 className="text-sm font-medium">
@@ -664,7 +664,7 @@ export default function DashboardPage() {
             )}
 
             {chartData && chartData.byStatus.length > 0 && (
-              <Card className="rounded-2xl border-border/60 p-5 xl:col-span-4">
+              <Card className="rounded-2xl border-border/60 p-5 lg:col-span-4">
                 <div className="mb-4 flex items-center gap-2">
                   <CheckCircle2 className="h-4 w-4 text-primary" />
                   <h2 className="text-sm font-medium">Processing Status</h2>
@@ -681,7 +681,7 @@ export default function DashboardPage() {
             )}
 
             {chartData && chartData.byType.length > 0 && (
-              <Card className="rounded-2xl border-border/60 p-5 xl:col-span-7">
+              <Card className="rounded-2xl border-border/60 p-5 lg:col-span-7">
                 <div className="mb-4 flex items-center gap-2">
                   <FileText className="h-4 w-4 text-primary" />
                   <h2 className="text-sm font-medium">
@@ -694,7 +694,7 @@ export default function DashboardPage() {
               </Card>
             )}
 
-            <Card className="rounded-2xl border-border/60 p-5 xl:col-span-5">
+            <Card className="rounded-2xl border-border/60 p-5 lg:col-span-5">
               <div className="mb-4 flex items-center gap-2">
                 <Sparkles className="h-4 w-4 text-primary" />
                 <h2 className="text-sm font-medium">Recent Analyses</h2>
