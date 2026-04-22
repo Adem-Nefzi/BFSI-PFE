@@ -3,7 +3,7 @@
 import React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BarChart3, FileText, LogOut } from "lucide-react";
+import { BarChart3, FileText, Link2, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SignOutButton, UserButton } from "@clerk/nextjs";
 import { motion } from "motion/react";
@@ -30,6 +30,12 @@ const navItems: NavItem[] = [
     label: "Contracts",
     icon: <FileText className="w-5 h-5" />,
     description: "Manage contracts",
+  },
+  {
+    href: "/blockchain",
+    label: "Blockchain",
+    icon: <Link2 className="w-5 h-5" />,
+    description: "On-chain proofs",
   },
 ];
 

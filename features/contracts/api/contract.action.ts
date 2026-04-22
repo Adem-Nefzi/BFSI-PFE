@@ -28,12 +28,21 @@ import {
 import { AIService } from "@/lib/services/ai.service";
 import { RAGService } from "@/lib/services/rag.service";
 import { NotificationService } from "@/lib/services/notification.service";
+import { BlockchainService } from "@/lib/services/blockchain.service";
+import { prisma } from "@/lib/db/prisma";
 import type { NormalizedAnalysis } from "@/lib/services/ai/analysis.types";
 
 type ContractListItem = Awaited<
   ReturnType<typeof ContractService.getAll>
 >[number] & {
   _count?: { ragChunks?: number | null };
+  // Blockchain proof fields (added to schema, Prisma returns them)
+  documentHash?: string | null;
+  txHash?: string | null;
+  blockNumber?: number | null;
+  blockTimestamp?: Date | null;
+  blockchainNetwork?: string | null;
+  contractAddress?: string | null;
 };
 
 type AnalysisWithMeta = NormalizedAnalysis & {
@@ -196,6 +205,13 @@ export async function getContracts(filters?: Record<string, unknown>) {
       extractedText: contract.extractedText || null,
       ragChunkCount: Number(contract?._count?.ragChunks ?? 0),
       isRagged: Number(contract?._count?.ragChunks ?? 0) > 0,
+      // Blockchain proof fields
+      documentHash: contract.documentHash || null,
+      txHash: contract.txHash || null,
+      blockNumber: contract.blockNumber || null,
+      blockTimestamp: contract.blockTimestamp ? contract.blockTimestamp.toISOString() : null,
+      blockchainNetwork: contract.blockchainNetwork || null,
+      contractAddress: contract.contractAddress || null,
     }));
 
     return { success: true, contracts: serializedContracts };
@@ -500,6 +516,52 @@ export async function analyzeContractAction(id: string) {
       summary: aiResults.summary,
       keyPoints: keyPointsWithLearning,
     });
+
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // BLOCKCHAIN: Auto-register document on-chain
+    // This is non-blocking — if blockchain fails, analysis still succeeds
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    try {
+      if (BlockchainService.isConfigured()) {
+        const proof = await BlockchainService.hashAndRegister(
+          contract.fileUrl,
+          contract.fileName
+        );
+
+        // Save blockchain proof to the contract record
+        await prisma.contract.update({
+          where: { id },
+          data: {
+            documentHash: proof.documentHash,
+            txHash: proof.txHash,
+            blockNumber: proof.blockNumber,
+            blockTimestamp: proof.blockTimestamp,
+            blockchainNetwork: proof.network,
+            contractAddress: proof.contractAddress,
+          },
+        });
+
+        // Create BlockchainTransaction for explorer
+        await prisma.blockchainTransaction.create({
+          data: {
+            userId: user.id,
+            contractId: id,
+            documentHash: proof.documentHash,
+            txHash: proof.txHash,
+            blockNumber: proof.blockNumber,
+            blockTimestamp: proof.blockTimestamp,
+            network: proof.network,
+            contractAddress: proof.contractAddress,
+            status: "CONFIRMED",
+          },
+        });
+
+        console.log(`🔗 Blockchain proof stored: ${proof.txHash.slice(0, 16)}...`);
+      }
+    } catch (blockchainError) {
+      // Blockchain failure should NOT fail the analysis
+      console.warn("⚠️ Blockchain registration skipped:", blockchainError);
+    }
 
     // Create success notification with extracted info
     const contractTitle = aiResults.title || "Contract";

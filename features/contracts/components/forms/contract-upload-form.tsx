@@ -171,47 +171,68 @@ export function ContractUploadForm({
       </div>
 
       {isAutoAnalyzing && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 backdrop-blur-sm animate-in fade-in duration-300">
-          <div className="mx-4 max-w-md rounded-3xl border border-border/60 bg-[radial-gradient(circle_at_top_right,hsl(var(--primary)/0.22),transparent_45%),radial-gradient(circle_at_bottom_left,hsl(var(--secondary)/0.16),transparent_45%),hsl(var(--background))] p-8 shadow-2xl md:p-10 zoom-in-95 animate-in duration-300">
-            <div className="flex flex-col items-center text-center space-y-6">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 backdrop-blur-md animate-in fade-in duration-500">
+          <div className="mx-4 max-w-md w-full rounded-[2.5rem] border border-white/20 bg-background/80 p-8 shadow-[0_32px_64px_-12px_rgba(0,0,0,0.3)] backdrop-blur-2xl md:p-10 zoom-in-95 animate-in duration-300 relative overflow-hidden group">
+            {/* Premium Background Accents */}
+            <div className="absolute -right-24 -top-24 h-64 w-64 rounded-full bg-primary/20 blur-[80px] animate-pulse"></div>
+            <div className="absolute -left-24 -bottom-24 h-64 w-64 rounded-full bg-secondary/15 blur-[80px] animate-pulse"></div>
+            
+            <div className="relative flex flex-col items-center text-center space-y-8">
+              {/* Icon Section */}
               <div className="relative">
-                <div className="absolute inset-0 rounded-full bg-primary/30 blur-xl animate-pulse"></div>
-                <div className="relative rounded-full bg-gradient-to-br from-primary to-accent p-4">
-                  <Sparkles className="h-8 w-8 animate-pulse text-white" />
+                <div className="absolute inset-0 rounded-full bg-primary/40 blur-2xl animate-pulse"></div>
+                <div className="relative h-20 w-20 rounded-3xl bg-gradient-to-br from-primary via-primary to-accent p-0.5 shadow-xl rotate-3 transition-transform group-hover:rotate-6">
+                  <div className="flex h-full w-full items-center justify-center rounded-[calc(1.5rem-2px)] bg-slate-950/10 backdrop-blur-sm">
+                    <Sparkles className="h-10 w-10 text-white animate-pulse" />
+                  </div>
+                </div>
+                <div className="absolute -bottom-2 -right-2 rounded-full bg-background border border-border/50 p-2 shadow-lg">
+                  <Loader2 className="h-5 w-5 animate-spin text-primary" />
                 </div>
               </div>
 
-              <div className="relative">
-                <Loader2 className="h-11 w-11 animate-spin text-primary" />
-              </div>
-
-              <div className="space-y-2">
-                <h3 className="text-xl font-semibold text-foreground">
-                  Analyzing And Building RAG
+              {/* Text Section */}
+              <div className="space-y-3">
+                <h3 className="text-2xl font-bold tracking-tight text-foreground bg-clip-text text-transparent bg-gradient-to-b from-foreground to-foreground/70">
+                  AI Extraction In Progress
                 </h3>
-                <p className="text-sm text-muted-foreground">
-                  Your contract is being analyzed and indexed for chat...
+                <p className="text-base text-muted-foreground/90 font-medium">
+                  We're parsing your document and building a semantic index...
                 </p>
               </div>
 
-              <div className="w-full space-y-2">
-                <div className="flex items-center justify-between text-xs text-muted-foreground">
-                  <span>Processing</span>
-                  <span className="flex items-center gap-1.5">
-                    <span className="h-1.5 w-1.5 rounded-full bg-primary animate-bounce [animation-delay:-0.3s]"></span>
-                    <span className="h-1.5 w-1.5 rounded-full bg-primary animate-bounce [animation-delay:-0.15s]"></span>
-                    <span className="h-1.5 w-1.5 rounded-full bg-primary animate-bounce"></span>
+              {/* Progress Section */}
+              <div className="w-full space-y-4 px-2">
+                <div className="flex items-center justify-between text-[13px] font-semibold">
+                  <span className="text-primary flex items-center gap-2">
+                    <Wand2 className="h-3.5 w-3.5" />
+                    Processing RAG
+                  </span>
+                  <span className="flex items-center gap-1.5 text-muted-foreground">
+                    <span className="h-1.5 w-1.5 rounded-full bg-primary/60 animate-bounce [animation-delay:-0.3s]"></span>
+                    <span className="h-1.5 w-1.5 rounded-full bg-primary/60 animate-bounce [animation-delay:-0.15s]"></span>
+                    <span className="h-1.5 w-1.5 rounded-full bg-primary/60 animate-bounce"></span>
                   </span>
                 </div>
 
-                <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
-                  <div className="h-full w-full rounded-full bg-gradient-to-r from-primary to-accent animate-progress-loading origin-left"></div>
+                <div className="relative h-3 w-full overflow-hidden rounded-full bg-muted/40 border border-border/20">
+                  <div className="absolute inset-0 bg-gradient-to-r from-primary via-accent to-secondary animate-progress-loading origin-left"></div>
+                  <div className="absolute inset-0 bg-[linear-gradient(90deg,transparent_0%,rgba(255,255,255,0.3)_50%,transparent_100%)] bg-[length:40px_100%] animate-shimmer"></div>
+                </div>
+                
+                <div className="flex justify-between items-center text-[11px] text-muted-foreground/70 font-medium uppercase tracking-wider">
+                  <span>OCR Analysis</span>
+                  <span>Vector Indexing</span>
                 </div>
               </div>
 
-              <p className="text-xs text-muted-foreground italic">
-                This may take up to 10 seconds
-              </p>
+              {/* Footer info */}
+              <div className="pt-4 border-t border-border/40 w-full">
+                <p className="text-xs text-muted-foreground italic flex items-center justify-center gap-1.5">
+                  <AlertCircle className="h-3 w-3" />
+                  Average processing time: 8-10 seconds
+                </p>
+              </div>
             </div>
           </div>
         </div>

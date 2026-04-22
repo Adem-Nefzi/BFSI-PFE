@@ -52,7 +52,10 @@ export interface Contract {
 
   documentHash: string | null;
   txHash: string | null;
-  ipfsUrl: string | null;
+  blockNumber: number | null;
+  blockTimestamp: Date | null;
+  blockchainNetwork: string | null;
+  contractAddress: string | null;
 
   createdAt: Date;
   updatedAt: Date;

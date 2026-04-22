@@ -15,8 +15,9 @@ model User {
   lastName  String?
   imageUrl  String?
 
-  contracts     Contract[]
-  notifications Notification[]
+  contracts              Contract[]
+  notifications          Notification[]
+  blockchainTransactions BlockchainTransaction[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -53,14 +54,18 @@ model Contract {
   summary       String? @db.Text
   keyPoints     Json?
 
-  // Blockchain (later)
-  documentHash String?
-  txHash       String?
-  ipfsUrl      String?
+  // Blockchain proof-of-deposit
+  documentHash      String?   // SHA-256 hash of the document
+  txHash            String?   // Ethereum transaction hash
+  blockNumber       Int?      // Block number where tx was mined
+  blockTimestamp    DateTime? // Timestamp of the block
+  blockchainNetwork String?   // 'hardhat' | 'sepolia'
+  contractAddress   String?   // Smart contract address used
 
-  // Notifications for this contract
-  notifications Notification[]
-  ragChunks     ContractRagChunk[]
+  // Relations
+  notifications          Notification[]
+  ragChunks              ContractRagChunk[]
+  blockchainTransactions BlockchainTransaction[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -118,6 +123,30 @@ model Notification {
   @@index([type])
   @@index([read])
   @@index([createdAt])
+}
+
+model BlockchainTransaction {
+  id        String @id @default(cuid())
+  userId    String
+  user      User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  contractId String
+  contract   Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+
+  documentHash    String   // SHA-256 hash of the document
+  txHash          String   @unique // Ethereum transaction hash
+  blockNumber     Int      // Block number where tx was mined
+  blockTimestamp  DateTime // Block timestamp = proof date
+  network         String   // 'hardhat' | 'sepolia'
+  contractAddress String   // Smart contract address used
+  status          String   @default("CONFIRMED") // PENDING, CONFIRMED, FAILED
+
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([contractId])
+  @@index([txHash])
+  @@index([network])
 }
 
 enum NotificationType {
